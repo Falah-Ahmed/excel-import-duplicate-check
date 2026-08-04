@@ -1,16 +1,28 @@
-const base = () => (process.env.FRAPPE_BASE_URL || "").replace(/\/$/, "").trim();
-const key = () => (process.env.FRAPPE_API_KEY || "").trim();
-const secret = () => (process.env.FRAPPE_API_SECRET || "").trim();
+/** One line only — Vercel values sometimes get pasted with newlines */
+function envOneLine(value: string | undefined, fallback = ""): string {
+  return (value || fallback)
+    .split(/[\r\n]+/)[0]
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
-export const REGISTER_DOCTYPE = (
-  process.env.FRAPPE_REGISTER_DOCTYPE || "Register People"
-).trim();
+const base = () => envOneLine(process.env.FRAPPE_BASE_URL).replace(/\/$/, "");
+const key = () => envOneLine(process.env.FRAPPE_API_KEY);
+const secret = () => envOneLine(process.env.FRAPPE_API_SECRET);
 
-export const PASSPORT_FIELD = (process.env.FRAPPE_PASSPORT_FIELD || "passport_number").trim();
-export const PHONE_FIELD = (process.env.FRAPPE_PHONE_FIELD || "phone_number").trim();
-export const ID_FIELD = (process.env.FRAPPE_ID_FIELD || "id_number").trim();
-export const NAME_FIELD = (process.env.FRAPPE_NAME_FIELD || "full_name").trim();
-export const NAME_AR_FIELD = (process.env.FRAPPE_NAME_AR_FIELD || "full_name_ar").trim();
+export const REGISTER_DOCTYPE = envOneLine(
+  process.env.FRAPPE_REGISTER_DOCTYPE,
+  "Registered People"
+);
+
+export const PASSPORT_FIELD = envOneLine(
+  process.env.FRAPPE_PASSPORT_FIELD,
+  "passport_number"
+);
+export const PHONE_FIELD = envOneLine(process.env.FRAPPE_PHONE_FIELD, "phone_number");
+export const ID_FIELD = envOneLine(process.env.FRAPPE_ID_FIELD, "id_number");
+export const NAME_FIELD = envOneLine(process.env.FRAPPE_NAME_FIELD, "full_name");
+export const NAME_AR_FIELD = envOneLine(process.env.FRAPPE_NAME_AR_FIELD, "full_name_ar");
 
 export function frappeBaseUrl() {
   return base();
