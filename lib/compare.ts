@@ -134,6 +134,7 @@ export function compareRows(rows: ExcelRow[], systemRecords: SystemRecord[]): {
       existing_record: primary?.display_name || "—",
       existing_id: primary?.name,
       existing_url: primary?.url,
+      existing_source: primary?.source,
     };
   });
 
@@ -157,6 +158,7 @@ export function demoSystemRecords(): SystemRecord[] {
       id_number: "1029384756",
       display_name: "Ahmed Ali",
       url: "#",
+      source: "Registered People",
     },
     {
       name: "REG-00002",
@@ -165,14 +167,17 @@ export function demoSystemRecords(): SystemRecord[] {
       id_number: "8877665544",
       display_name: "Sara Hassan",
       url: "#",
+      source: "Registered People",
     },
     {
-      name: "REG-00003",
+      name: "FAM-00001",
       passport: "P112233",
       phone: "+966 54 000 7788",
       id_number: "5566778899",
-      display_name: "محمد عبدالله",
+      display_name: "محمد عبدالله (Family of REG-00002)",
       url: "#",
+      source: "Family Member",
+      parent: "REG-00002",
     },
   ];
 }

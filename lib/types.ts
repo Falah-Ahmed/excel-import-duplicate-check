@@ -21,6 +21,7 @@ export type CompareResult = {
   existing_record: string;
   existing_id?: string;
   existing_url?: string;
+  existing_source?: string;
 };
 
 export type CompareSummary = {
@@ -35,9 +36,11 @@ export type CompareResponse = {
   ok: boolean;
   demo?: boolean;
   error?: string;
+  warning?: string;
   summary: CompareSummary;
   results: CompareResult[];
   system_records_loaded: number;
+  mapping?: { excel: string; key: string; frappe: string }[];
   config?: {
     base_url?: string;
     register_doctype?: string;
@@ -46,6 +49,10 @@ export type CompareResponse = {
     id_field?: string;
     name_field?: string;
     name_ar_field?: string;
+    family_doctype?: string;
+    family_name_field?: string;
+    include_family?: boolean;
+    column_mapping?: Record<string, string>;
     configured?: boolean;
   };
 };

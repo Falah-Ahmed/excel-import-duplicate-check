@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
-import { formatBytes, sheetToRows } from "@/lib/excel-map";
+import { formatBytes, sheetToRows, type ColumnMap } from "@/lib/excel-map";
 import type { CompareResponse, CompareResult, ExcelRow, RecordStatus } from "@/lib/types";
 import styles from "./import-check.module.css";
 
@@ -29,7 +29,8 @@ export default function ImportCheck() {
   const [fileName, setFileName] = useState("");
   const [fileSize, setFileSize] = useState(0);
   const [rows, setRows] = useState<ExcelRow[]>([]);
-  const [columns, setColumns] = useState<string[]>([]);
+  const [columnMap, setColumnMap] = useState<ColumnMap>({});
+  const [headers, setHeaders] = useState<string[]>([]);
   const [compare, setCompare] = useState<CompareResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -52,6 +53,8 @@ export default function ImportCheck() {
       setCompare(json);
       if (json.error) {
         setMessage(json.demo ? `Demo mode — full error:\n\n${json.error}` : json.error);
+      } else if (json.warning) {
+        setMessage(json.warning);
       }
     } catch {
       setMessage("Compare request failed");
@@ -79,7 +82,8 @@ export default function ImportCheck() {
 
       const parsed = sheetToRows(matrix);
       setRows(parsed.rows);
-      setColumns(Object.values(parsed.columns).filter(Boolean) as string[]);
+      setColumnMap(parsed.columns);
+      setHeaders(parsed.headers);
       await runCompare(parsed.rows);
     },
     [runCompare]
@@ -189,7 +193,8 @@ export default function ImportCheck() {
     setFileName("");
     setFileSize(0);
     setRows([]);
-    setColumns([]);
+    setColumnMap({});
+    setHeaders([]);
     setCompare(null);
     setTab("all");
     setSearch("");
@@ -248,7 +253,7 @@ export default function ImportCheck() {
               <strong>{fileName}</strong>
               <div className={styles.fileMeta}>
                 {formatBytes(fileSize)} · {rows.length.toLocaleString()} rows
-                {columns.length ? ` · columns: ${columns.join(", ")}` : ""}
+                {headers.length ? ` · headers: ${headers.join(", ")}` : ""}
               </div>
             </div>
             <div className={styles.fileActions}>
@@ -259,6 +264,52 @@ export default function ImportCheck() {
                 Remove
               </button>
             </div>
+          </div>
+        )}
+
+        {fileName && (
+          <div className={styles.mapBox}>
+            <h3>Column mapping (Excel → Frappe)</h3>
+            <p className={styles.mapSub}>
+              Key = Excel header · Value = Frappe fieldname. Family Member child table is also
+              checked using <code>family_name</code> (and passport / phone / ID if present).
+            </p>
+            <table className={styles.mapTable}>
+              <thead>
+                <tr>
+                  <th>Excel column (key)</th>
+                  <th>Maps to</th>
+                  <th>Frappe field (value)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>{columnMap.name || "Name (not found)"}</td>
+                  <td>Name</td>
+                  <td>{compare?.config?.name_field || "full_name"}</td>
+                </tr>
+                <tr>
+                  <td>{columnMap.passport || "Passport No. (not found)"}</td>
+                  <td>Passport</td>
+                  <td>{compare?.config?.passport_field || "passport_number"}</td>
+                </tr>
+                <tr>
+                  <td>{columnMap.phone || "Phone Number (not found)"}</td>
+                  <td>Phone</td>
+                  <td>{compare?.config?.phone_field || "phone_number"}</td>
+                </tr>
+                <tr>
+                  <td>{columnMap.id_number || "ID Number (not found)"}</td>
+                  <td>ID Number</td>
+                  <td>{compare?.config?.id_field || "id_number"}</td>
+                </tr>
+                <tr>
+                  <td>Family Member (child table)</td>
+                  <td>Family name</td>
+                  <td>{compare?.config?.family_name_field || "family_name"}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         )}
       </section>
@@ -325,6 +376,7 @@ export default function ImportCheck() {
                   <th>ID Number</th>
                   <th>Matched By</th>
                   <th>Existing System Record</th>
+                  <th>Source</th>
                   <th>Status</th>
                   <th />
                 </tr>
@@ -332,14 +384,14 @@ export default function ImportCheck() {
               <tbody>
                 {loading && (
                   <tr>
-                    <td colSpan={9} className={styles.empty}>
+                    <td colSpan={10} className={styles.empty}>
                       Comparing with system database…
                     </td>
                   </tr>
                 )}
                 {!loading && pageRows.length === 0 && (
                   <tr>
-                    <td colSpan={9} className={styles.empty}>
+                    <td colSpan={10} className={styles.empty}>
                       No records in this tab
                     </td>
                   </tr>
@@ -411,6 +463,7 @@ function ResultRow({ row }: { row: CompareResult }) {
       <td>{row.id_number}</td>
       <td>{row.matched_by}</td>
       <td>{row.existing_record}</td>
+      <td>{row.existing_source || "—"}</td>
       <td>
         <span className={`${styles.badge} ${styles[row.status]}`}>{STATUS_LABEL[row.status]}</span>
       </td>

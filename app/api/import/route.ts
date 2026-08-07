@@ -36,8 +36,8 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const systemRecords = await fetchAllSystemRecords();
-    const { results } = compareRows(rows, systemRecords);
+    const { records } = await fetchAllSystemRecords();
+    const { results } = compareRows(rows, records);
     const toImport = results.filter((r) => r.status === "new");
     const rowByNumber = new Map(rows.map((r) => [r.row, r]));
 

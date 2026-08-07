@@ -102,6 +102,51 @@
   cursor: pointer;
 }
 
+.mapBox {
+  margin-top: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 14px;
+  background: #fafbfc;
+}
+
+.mapBox h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+}
+
+.mapSub {
+  margin: 0 0 10px;
+  color: #6b7280;
+  font-size: 12px;
+}
+
+.mapTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: #fff;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.mapTable th,
+.mapTable td {
+  border: 1px solid #e5e7eb;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.mapTable th {
+  background: #f3f4f6;
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.mapTable code {
+  font-size: 12px;
+}
+
 .dangerText {
   color: #dc2626 !important;
 }
