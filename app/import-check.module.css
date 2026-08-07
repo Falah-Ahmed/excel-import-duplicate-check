@@ -341,11 +341,31 @@
 
 .hint {
   margin-top: 8px;
-  padding: 10px 12px;
+  padding: 12px 14px;
   border-radius: 8px;
   background: #fff7ed;
   color: #9a3412;
   font-size: 13px;
+  border: 1px solid #fed7aa;
+}
+
+.hintTitle {
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.hintBody {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  max-height: 320px;
+  overflow: auto;
+  background: #fffbeb;
+  border-radius: 6px;
+  padding: 10px;
 }
 
 @media (max-width: 900px) {

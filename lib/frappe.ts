@@ -39,6 +39,66 @@ export function frappeConfigured(): boolean {
   return Boolean(base() && key() && secret());
 }
 
+/** Keep full Frappe body so the UI can show the real PermissionError / field error */
+export function formatFrappeError(status: number, text: string, context: string): string {
+  const trimmed = (text || "").trim();
+  let detail = trimmed;
+
+  try {
+    const json = JSON.parse(trimmed) as {
+      exception?: string;
+      exc_type?: string;
+      message?: string;
+      _server_messages?: string;
+    };
+
+    const parts: string[] = [];
+    if (json.exc_type) parts.push(`Type: ${json.exc_type}`);
+    if (json.exception) parts.push(`Exception: ${json.exception}`);
+    if (json.message) parts.push(`Message: ${json.message}`);
+
+    if (json._server_messages) {
+      try {
+        const messages = JSON.parse(json._server_messages) as string[];
+        for (const raw of messages) {
+          try {
+            const msg = JSON.parse(raw) as { message?: string; title?: string };
+            if (msg.message) parts.push(`Server: ${msg.message}`);
+            else if (msg.title) parts.push(`Server: ${msg.title}`);
+          } catch {
+            parts.push(`Server: ${raw}`);
+          }
+        }
+      } catch {
+        parts.push(`Server messages: ${json._server_messages}`);
+      }
+    }
+
+    if (parts.length) {
+      detail = parts.join("\n");
+    } else {
+      detail = JSON.stringify(json, null, 2);
+    }
+  } catch {
+    // keep raw text
+  }
+
+  const config = getFrappeConfig();
+  return [
+    `${context} (HTTP ${status})`,
+    detail,
+    "",
+    "Config:",
+    `  doctype=${config.register_doctype}`,
+    `  passport_field=${config.passport_field}`,
+    `  phone_field=${config.phone_field}`,
+    `  id_field=${config.id_field}`,
+    `  name_field=${config.name_field}`,
+    `  name_ar_field=${config.name_ar_field}`,
+    `  base_url=${config.base_url}`,
+  ].join("\n");
+}
+
 export function getFrappeConfig() {
   return {
     base_url: base(),
@@ -82,7 +142,7 @@ export async function fetchAllSystemRecords(): Promise<SystemRecord[]> {
     });
     if (!res.ok) {
       const text = await res.text();
-      throw new Error(`Frappe list failed (${res.status}): ${text.slice(0, 200)}`);
+      throw new Error(formatFrappeError(res.status, text, "Frappe list failed"));
     }
 
     const json = await res.json();
@@ -123,7 +183,7 @@ export async function insertRecord(payload: Record<string, string>): Promise<str
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text.slice(0, 300));
+    throw new Error(formatFrappeError(res.status, text, "Frappe insert failed"));
   }
   const json = await res.json();
   return String(json?.data?.name ?? "");

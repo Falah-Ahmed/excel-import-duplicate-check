@@ -38,6 +38,16 @@ export type CompareResponse = {
   summary: CompareSummary;
   results: CompareResult[];
   system_records_loaded: number;
+  config?: {
+    base_url?: string;
+    register_doctype?: string;
+    passport_field?: string;
+    phone_field?: string;
+    id_field?: string;
+    name_field?: string;
+    name_ar_field?: string;
+    configured?: boolean;
+  };
 };
 
 export type ImportResponse = {

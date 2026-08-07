@@ -50,8 +50,8 @@ export default function ImportCheck() {
       });
       const json: CompareResponse = await res.json();
       setCompare(json);
-      if (json.error && json.demo) {
-        setMessage(`Demo mode — ${json.error}`);
+      if (json.error) {
+        setMessage(json.demo ? `Demo mode — full error:\n\n${json.error}` : json.error);
       }
     } catch {
       setMessage("Compare request failed");
@@ -129,10 +129,18 @@ export default function ImportCheck() {
       });
       const json = await res.json();
       if (!json.ok) {
-        setMessage(json.error || "Import failed");
+        const detail =
+          Array.isArray(json.errors) && json.errors.length
+            ? json.errors.map((e: { row: number; message: string }) => `Row ${e.row}: ${e.message}`).join("\n")
+            : json.error || "Import failed";
+        setMessage(detail);
         return;
       }
-      setMessage(`Imported ${json.imported} new record(s). Failed: ${json.failed}.`);
+      const failDetail =
+        Array.isArray(json.errors) && json.errors.length
+          ? `\n${json.errors.map((e: { row: number; message: string }) => `Row ${e.row}: ${e.message}`).join("\n")}`
+          : "";
+      setMessage(`Imported ${json.imported} new record(s). Failed: ${json.failed}.${failDetail}`);
       await runCompare(rows);
     } catch {
       setMessage("Import request failed");
@@ -364,7 +372,12 @@ export default function ImportCheck() {
         </section>
       )}
 
-      {message && <div className={styles.hint}>{message}</div>}
+      {message && (
+        <div className={styles.hint}>
+          <div className={styles.hintTitle}>Error details</div>
+          <pre className={styles.hintBody}>{message}</pre>
+        </div>
+      )}
 
       {compare && (
         <footer className={styles.footer}>
