@@ -304,9 +304,24 @@ export default function ImportCheck() {
                   <td>{compare?.config?.id_field || "id_number"}</td>
                 </tr>
                 <tr>
-                  <td>Family Member (child table)</td>
+                  <td>Family Member → name</td>
                   <td>Family name</td>
-                  <td>{compare?.config?.family_name_field || "family_name"}</td>
+                  <td>{compare?.config?.family_name_field || "name_3"}</td>
+                </tr>
+                <tr>
+                  <td>Family Member → passport</td>
+                  <td>Passport</td>
+                  <td>{compare?.config?.family_passport_field || "passport_number"}</td>
+                </tr>
+                <tr>
+                  <td>Family Member → phone</td>
+                  <td>Phone</td>
+                  <td>{compare?.config?.family_phone_field || "phone_number"}</td>
+                </tr>
+                <tr>
+                  <td>Family Member → ID</td>
+                  <td>ID Number</td>
+                  <td>{compare?.config?.family_id_field || "id_number"}</td>
                 </tr>
               </tbody>
             </table>

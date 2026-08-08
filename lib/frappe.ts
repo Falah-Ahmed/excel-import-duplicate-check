@@ -32,25 +32,33 @@ export const NAME_FIELD = envOneLine(process.env.FRAPPE_NAME_FIELD, "main_parent
 /** Optional — leave empty in Vercel if you have no Arabic name field */
 export const NAME_AR_FIELD = envOneLine(process.env.FRAPPE_NAME_AR_FIELD, "");
 
-/** Family Member child table */
+/** Family Member child table — use Customize Form fieldnames on Family Member (not parent) */
 export const INCLUDE_FAMILY = envFlag(process.env.FRAPPE_INCLUDE_FAMILY_MEMBERS, true);
 export const FAMILY_DOCTYPE = envOneLine(
   process.env.FRAPPE_FAMILY_DOCTYPE,
   "Family Member"
 );
+/** Child table fieldname on Registered People (e.g. family_member) */
+export const FAMILY_TABLE_FIELD = envOneLine(
+  process.env.FRAPPE_FAMILY_TABLE_FIELD,
+  "family_member"
+);
 export const FAMILY_NAME_FIELD = envOneLine(
   process.env.FRAPPE_FAMILY_NAME_FIELD,
-  "family_name"
+  "name_3"
 );
 export const FAMILY_PASSPORT_FIELD = envOneLine(
   process.env.FRAPPE_FAMILY_PASSPORT_FIELD,
-  PASSPORT_FIELD
+  "passport_number"
 );
 export const FAMILY_PHONE_FIELD = envOneLine(
   process.env.FRAPPE_FAMILY_PHONE_FIELD,
-  PHONE_FIELD
+  "phone_number"
 );
-export const FAMILY_ID_FIELD = envOneLine(process.env.FRAPPE_FAMILY_ID_FIELD, ID_FIELD);
+export const FAMILY_ID_FIELD = envOneLine(
+  process.env.FRAPPE_FAMILY_ID_FIELD,
+  "id_number"
+);
 
 export function frappeBaseUrl() {
   return base();
@@ -78,6 +86,7 @@ export function getFrappeConfig() {
     name_ar_field: NAME_AR_FIELD,
     include_family: INCLUDE_FAMILY,
     family_doctype: FAMILY_DOCTYPE,
+    family_table_field: FAMILY_TABLE_FIELD,
     family_name_field: FAMILY_NAME_FIELD,
     family_passport_field: FAMILY_PASSPORT_FIELD,
     family_phone_field: FAMILY_PHONE_FIELD,
@@ -89,7 +98,10 @@ export function getFrappeConfig() {
       "Passport No.": PASSPORT_FIELD,
       "Phone Number": PHONE_FIELD,
       "ID Number": ID_FIELD,
-      "Family Member → family name": FAMILY_NAME_FIELD,
+      "Family Member → name": FAMILY_NAME_FIELD,
+      "Family Member → passport": FAMILY_PASSPORT_FIELD,
+      "Family Member → phone": FAMILY_PHONE_FIELD,
+      "Family Member → ID": FAMILY_ID_FIELD,
     },
   };
 }
@@ -148,7 +160,11 @@ export function formatFrappeError(status: number, text: string, context: string)
     `  name_field=${config.name_field}`,
     `  name_ar_field=${config.name_ar_field}`,
     `  family_doctype=${config.family_doctype}`,
+    `  family_table_field=${config.family_table_field}`,
     `  family_name_field=${config.family_name_field}`,
+    `  family_passport_field=${config.family_passport_field}`,
+    `  family_phone_field=${config.family_phone_field}`,
+    `  family_id_field=${config.family_id_field}`,
     `  include_family=${config.include_family}`,
     `  base_url=${config.base_url}`,
   ].join("\n");
@@ -263,7 +279,118 @@ async function fetchParentRecords(): Promise<SystemRecord[]> {
   });
 }
 
-async function fetchFamilyMembers(): Promise<{ records: SystemRecord[]; warning?: string }> {
+function mapFamilyRow(row: Record<string, unknown>, parentHint?: string): SystemRecord {
+  const id = String(row.name ?? "");
+  const parent = String(row.parent ?? parentHint ?? "").trim();
+  const familyName = String(row[FAMILY_NAME_FIELD] ?? "").trim();
+  return {
+    name: id || `${parent}-${familyName || "member"}`,
+    passport: String(row[FAMILY_PASSPORT_FIELD] ?? "").trim(),
+    phone: String(row[FAMILY_PHONE_FIELD] ?? "").trim(),
+    id_number: String(row[FAMILY_ID_FIELD] ?? "").trim(),
+    display_name: familyName
+      ? `${familyName} (Family of ${parent || "—"})`
+      : `Family Member ${id || parent}`,
+    url: parent ? parentUrl(parent) : "#",
+    source: FAMILY_DOCTYPE,
+    parent: parent || undefined,
+  };
+}
+
+async function fetchParentDoc(parentId: string): Promise<Record<string, unknown> | null> {
+  const url = `${base()}/api/resource/${encodeURIComponent(REGISTER_DOCTYPE)}/${encodeURIComponent(parentId)}`;
+  const res = await fetch(url, {
+    headers: frappeAuthHeaders(),
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  const json = await res.json();
+  return (json?.data as Record<string, unknown>) || null;
+}
+
+function extractChildRows(
+  parentDoc: Record<string, unknown>,
+  parentId: string
+): Record<string, unknown>[] {
+  const preferred = FAMILY_TABLE_FIELD;
+  const candidates = preferred
+    ? [preferred]
+    : Object.keys(parentDoc).filter((k) => /family/i.test(k));
+
+  for (const field of candidates) {
+    const value = parentDoc[field];
+    if (Array.isArray(value) && value.length) {
+      return value as Record<string, unknown>[];
+    }
+  }
+
+  // Auto-detect first array of objects that looks like family rows
+  for (const [key, value] of Object.entries(parentDoc)) {
+    if (!Array.isArray(value) || !value.length) continue;
+    const first = value[0];
+    if (!first || typeof first !== "object") continue;
+    const obj = first as Record<string, unknown>;
+    if (
+      FAMILY_NAME_FIELD in obj ||
+      FAMILY_PASSPORT_FIELD in obj ||
+      FAMILY_ID_FIELD in obj ||
+      FAMILY_PHONE_FIELD in obj
+    ) {
+      void key;
+      return value as Record<string, unknown>[];
+    }
+  }
+
+  void parentId;
+  return [];
+}
+
+/** Fallback when listing Family Member is forbidden (403) — read child rows from each parent */
+async function fetchFamilyViaParents(parentIds: string[]): Promise<{
+  records: SystemRecord[];
+  warning?: string;
+}> {
+  const records: SystemRecord[] = [];
+  const limit = Math.min(parentIds.length, 300);
+  let loaded = 0;
+  let failed = 0;
+
+  for (let i = 0; i < limit; i += 15) {
+    const batch = parentIds.slice(i, i + 15);
+    const docs = await Promise.all(batch.map((id) => fetchParentDoc(id)));
+    for (let j = 0; j < batch.length; j++) {
+      const doc = docs[j];
+      if (!doc) {
+        failed += 1;
+        continue;
+      }
+      loaded += 1;
+      const children = extractChildRows(doc, batch[j]);
+      for (const child of children) {
+        records.push(mapFamilyRow(child, batch[j]));
+      }
+    }
+  }
+
+  const notes: string[] = [];
+  notes.push(
+    `Family Member loaded via parent documents (${records.length} members from ${loaded} parents).`
+  );
+  if (parentIds.length > limit) {
+    notes.push(`Only first ${limit} parents were scanned (of ${parentIds.length}).`);
+  }
+  if (failed) notes.push(`${failed} parent docs failed to load.`);
+  notes.push(
+    "Tip: give Admin Read permission on Family Member to load all members faster via list API."
+  );
+
+  return { records, warning: notes.join(" ") };
+}
+
+async function fetchFamilyMembers(parentIds: string[]): Promise<{
+  records: SystemRecord[];
+  warning?: string;
+}> {
   if (!INCLUDE_FAMILY || !FAMILY_DOCTYPE) return { records: [] };
 
   try {
@@ -280,32 +407,20 @@ async function fetchFamilyMembers(): Promise<{ records: SystemRecord[]; warning?
       [["parenttype", "=", REGISTER_DOCTYPE]]
     );
 
-    const records = rows.map((row) => {
-      const id = String(row.name ?? "");
-      const parent = String(row.parent ?? "").trim();
-      const familyName = String(row[FAMILY_NAME_FIELD] ?? "").trim();
-      return {
-        name: id,
-        passport: String(row[FAMILY_PASSPORT_FIELD] ?? "").trim(),
-        phone: String(row[FAMILY_PHONE_FIELD] ?? "").trim(),
-        id_number: String(row[FAMILY_ID_FIELD] ?? "").trim(),
-        display_name: familyName
-          ? `${familyName} (Family of ${parent || "—"})`
-          : `Family Member ${id}`,
-        url: parent ? parentUrl(parent) : "#",
-        source: FAMILY_DOCTYPE,
-        parent: parent || undefined,
-      };
-    });
-
-    return { records };
+    return { records: rows.map((row) => mapFamilyRow(row)) };
   } catch (err) {
+    const message = err instanceof Error ? err.message : "Family Member list failed";
+    // Child tables often block get_list with 403 — fall back to parent docs
+    if (/403|PermissionError/i.test(message) && parentIds.length) {
+      const viaParents = await fetchFamilyViaParents(parentIds);
+      return {
+        records: viaParents.records,
+        warning: `Direct Family Member list blocked (403). ${viaParents.warning || ""}`,
+      };
+    }
     return {
       records: [],
-      warning:
-        err instanceof Error
-          ? `Family Member child table skipped: ${err.message}`
-          : "Family Member child table skipped",
+      warning: `Family Member child table skipped: ${message}`,
     };
   }
 }
@@ -317,7 +432,7 @@ export async function fetchAllSystemRecords(): Promise<{
   if (!frappeConfigured()) return { records: [] };
 
   const parents = await fetchParentRecords();
-  const family = await fetchFamilyMembers();
+  const family = await fetchFamilyMembers(parents.map((p) => p.name));
 
   return {
     records: [...parents, ...family.records],
