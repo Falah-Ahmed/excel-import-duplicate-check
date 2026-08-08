@@ -28,8 +28,9 @@ export const PASSPORT_FIELD = envOneLine(
 );
 export const PHONE_FIELD = envOneLine(process.env.FRAPPE_PHONE_FIELD, "phone_number");
 export const ID_FIELD = envOneLine(process.env.FRAPPE_ID_FIELD, "id_number");
-export const NAME_FIELD = envOneLine(process.env.FRAPPE_NAME_FIELD, "full_name");
-export const NAME_AR_FIELD = envOneLine(process.env.FRAPPE_NAME_AR_FIELD, "full_name_ar");
+export const NAME_FIELD = envOneLine(process.env.FRAPPE_NAME_FIELD, "main_parent_name");
+/** Optional — leave empty in Vercel if you have no Arabic name field */
+export const NAME_AR_FIELD = envOneLine(process.env.FRAPPE_NAME_AR_FIELD, "");
 
 /** Family Member child table */
 export const INCLUDE_FAMILY = envFlag(process.env.FRAPPE_INCLUDE_FAMILY_MEMBERS, true);
@@ -168,6 +169,11 @@ function uniqueFields(fields: string[]): string[] {
   return Array.from(new Set(fields.filter((f) => f && f !== "name")));
 }
 
+function extractBadField(text: string): string | null {
+  const match = text.match(/Field not permitted in query:\s*([a-zA-Z0-9_]+)/i);
+  return match?.[1] || null;
+}
+
 async function listDoctype(
   doctype: string,
   fields: string[],
@@ -176,7 +182,8 @@ async function listDoctype(
   const out: Record<string, unknown>[] = [];
   const pageSize = 500;
   let start = 0;
-  const select = uniqueFields(["name", ...fields]);
+  let select = uniqueFields(["name", ...fields]);
+  const dropped: string[] = [];
 
   while (true) {
     const url = new URL(`${base()}/api/method/frappe.client.get_list`);
@@ -195,6 +202,15 @@ async function listDoctype(
     });
     if (!res.ok) {
       const text = await res.text();
+      const bad = extractBadField(text);
+      if (bad && select.includes(bad)) {
+        // Drop invalid/optional field and retry (common for wrong NAME_AR_FIELD)
+        select = select.filter((f) => f !== bad);
+        dropped.push(bad);
+        start = 0;
+        out.length = 0;
+        continue;
+      }
       throw new Error(formatFrappeError(res.status, text, `Frappe list failed for ${doctype}`));
     }
 
@@ -208,6 +224,10 @@ async function listDoctype(
     out.push(...rows);
     if (rows.length < pageSize) break;
     start += pageSize;
+  }
+
+  if (dropped.length) {
+    console.warn(`[frappe] dropped fields for ${doctype}: ${dropped.join(", ")}`);
   }
 
   return out;
