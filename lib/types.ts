@@ -50,7 +50,11 @@ export type CompareResponse = {
     name_field?: string;
     name_ar_field?: string;
     family_doctype?: string;
+    family_table_field?: string;
     family_name_field?: string;
+    family_passport_field?: string;
+    family_phone_field?: string;
+    family_id_field?: string;
     include_family?: boolean;
     column_mapping?: Record<string, string>;
     configured?: boolean;
