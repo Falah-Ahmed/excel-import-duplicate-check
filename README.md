@@ -70,31 +70,7 @@ Arabic names are normalized (alef/ta marbuta variants) for comparison.
 
 ---
 
-## 4) PDF details tab (iframe)
-
-URL:
-
-```
-https://excel-import-duplicate-check-lfae.vercel.app/pdf?name=RECORD-ID
-```
-
-- English / العربية toggle
-- Hide any field before print
-- **Print / Save PDF** uses the browser print dialog
-
-### Add a tab on Registered People
-
-1. Customize Form → **Registered People** → add an **HTML** field  
-   Fieldname: `pdf_details`  
-   Label: `PDF` (or `التفاصيل`)
-2. Desk → **Client Script** → New → DocType `Registered People` → Form  
-3. Paste `frappe-pdf-client-script.js` and save
-
-The iframe loads the current record automatically.
-
----
-
-## 5) Embed in Frappe iframe
+## 4) Embed in Frappe iframe
 
 Desk → **HTML Block** → New → paste:
 
