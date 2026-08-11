@@ -297,7 +297,7 @@ function mapFamilyRow(row: Record<string, unknown>, parentHint?: string): System
   };
 }
 
-async function fetchParentDoc(parentId: string): Promise<Record<string, unknown> | null> {
+export async function fetchParentDoc(parentId: string): Promise<Record<string, unknown> | null> {
   const url = `${base()}/api/resource/${encodeURIComponent(REGISTER_DOCTYPE)}/${encodeURIComponent(parentId)}`;
   const res = await fetch(url, {
     headers: frappeAuthHeaders(),
@@ -308,7 +308,7 @@ async function fetchParentDoc(parentId: string): Promise<Record<string, unknown>
   return (json?.data as Record<string, unknown>) || null;
 }
 
-function extractChildRows(
+export function extractChildRows(
   parentDoc: Record<string, unknown>,
   parentId: string
 ): Record<string, unknown>[] {
