@@ -217,6 +217,16 @@ export default function ImportCheck() {
         >
           Import Excel File
         </button>
+        <button
+          type="button"
+          className={styles.btnGhost}
+          onClick={async () => {
+            await fetch("/api/auth/logout", { method: "POST" });
+            window.location.href = "/login";
+          }}
+        >
+          Logout
+        </button>
         <input
           ref={inputRef}
           type="file"
