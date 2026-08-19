@@ -1,11 +1,12 @@
-import { Suspense } from "react";
-import LoginForm from "./login-form";
-import { ssoOnly } from "@/lib/session";
+import styles from "./login.module.css";
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div style={{ padding: 24 }}>Loading…</div>}>
-      <LoginForm ssoOnly={ssoOnly()} />
-    </Suspense>
+    <div className={styles.page}>
+      <div className={styles.denied}>
+        <h1>403</h1>
+        <p>Access Denied</p>
+      </div>
+    </div>
   );
 }
