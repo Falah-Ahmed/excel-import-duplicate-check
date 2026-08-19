@@ -130,6 +130,7 @@ export function sessionCookieOptions(token: string) {
     sameSite: "none" as const,
     path: "/",
     maxAge: MAX_AGE_SEC,
+    partitioned: true,
   };
 }
 

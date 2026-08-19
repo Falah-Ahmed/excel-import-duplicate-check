@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
+import { authFetch, clearClientSessionToken } from "@/lib/client-session";
 import { formatBytes, sheetToRows, type ColumnMap } from "@/lib/excel-map";
 import type { CompareResponse, CompareResult, ExcelRow, RecordStatus } from "@/lib/types";
 import styles from "./import-check.module.css";
@@ -38,17 +39,32 @@ export default function ImportCheck() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [message, setMessage] = useState<string | null>(null);
+  const [denied, setDenied] = useState(false);
   const pageSize = 10;
+
+  useEffect(() => {
+    authFetch("/api/compare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rows: [] }),
+    }).then((res) => {
+      if (res.status === 403) setDenied(true);
+    });
+  }, []);
 
   const runCompare = useCallback(async (parsedRows: ExcelRow[]) => {
     setLoading(true);
     setMessage(null);
     try {
-      const res = await fetch("/api/compare", {
+      const res = await authFetch("/api/compare", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rows: parsedRows }),
       });
+      if (res.status === 403) {
+        setDenied(true);
+        return;
+      }
       const json: CompareResponse = await res.json();
       setCompare(json);
       if (json.error) {
@@ -126,11 +142,15 @@ export default function ImportCheck() {
     setImporting(true);
     setMessage(null);
     try {
-      const res = await fetch("/api/import", {
+      const res = await authFetch("/api/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rows }),
       });
+      if (res.status === 403) {
+        setDenied(true);
+        return;
+      }
       const json = await res.json();
       if (!json.ok) {
         const detail =
@@ -203,6 +223,15 @@ export default function ImportCheck() {
     if (inputRef.current) inputRef.current.value = "";
   }
 
+  if (denied) {
+    return (
+      <div className={styles.denied}>
+        <h1>403</h1>
+        <p>Access Denied</p>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.page}>
       <header className={styles.header}>
@@ -221,7 +250,8 @@ export default function ImportCheck() {
           type="button"
           className={styles.btnGhost}
           onClick={async () => {
-            await fetch("/api/auth/logout", { method: "POST" });
+            clearClientSessionToken();
+            await authFetch("/api/auth/logout", { method: "POST" });
             window.location.href = "/login";
           }}
         >

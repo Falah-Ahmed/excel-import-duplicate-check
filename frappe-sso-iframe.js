@@ -1,6 +1,5 @@
 /**
  * HTML Block for Duplicate Check workspace.
- * Replace APP_URL with your Vercel URL.
  */
 (function () {
   const APP_URL = "https://excel-import-duplicate-check-lfae.vercel.app";

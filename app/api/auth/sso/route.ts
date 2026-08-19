@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { accessDeniedResponse } from "@/lib/access-denied";
-import { hasAllowedRole } from "@/lib/frappe-login";
+import { fetchRolesFromCookie, hasAllowedRole } from "@/lib/frappe-login";
 import {
   allowedRoles,
   authConfigured,
+  sessionCookieName,
   sessionCookieOptions,
   signSession,
   verifyBridgeToken,
@@ -42,24 +43,24 @@ async function userFromSid(sid: string) {
     // ignore
   }
 
-  let roles: string[] = [];
-  try {
-    const rolesRes = await fetch(
-      `${baseUrl()}/api/method/frappe.client.get_list?doctype=Has%20Role&fields=${encodeURIComponent(
-        JSON.stringify(["role"])
-      )}&filters=${encodeURIComponent(JSON.stringify([["parent", "=", user]]))}&limit_page_length=100`,
-      { headers: { Accept: "application/json", Cookie: cookie }, cache: "no-store" }
-    );
-    if (rolesRes.ok) {
-      const rolesJson = await rolesRes.json();
-      const rows = rolesJson.message || [];
-      if (Array.isArray(rows)) roles = rows.map((r: { role?: string }) => r.role).filter(Boolean);
-    }
-  } catch {
-    // ignore
-  }
-
+  const roles = await fetchRolesFromCookie(cookie);
   return { user, full_name: fullName, roles };
+}
+
+function ssoBootstrapHtml(token: string, nextPath: string) {
+  const key = sessionCookieName();
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Signing in…</title>
+  <script>
+    try { sessionStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(token)}); } catch (e) {}
+    location.replace(${JSON.stringify(nextPath)});
+  </script>
+</head>
+<body></body>
+</html>`;
 }
 
 /** SSO entry for Frappe iframe: /api/auth/sso?sid=FRAPPE_SID&next=/ */
@@ -106,7 +107,10 @@ export async function GET(req: NextRequest) {
   }
 
   const session = await signSession({ user, full_name: fullName, via: "sso" });
-  const res = NextResponse.redirect(new URL(safeNext, req.url));
+  const res = new NextResponse(ssoBootstrapHtml(session, safeNext), {
+    status: 200,
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+  });
   const cookie = sessionCookieOptions(session);
   res.cookies.set(cookie.name, cookie.value, cookie);
   return res;

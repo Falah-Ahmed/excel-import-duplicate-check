@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { accessDeniedResponse } from "@/lib/access-denied";
-import { sessionCookieName, ssoOnly, verifySession } from "@/lib/session";
+import { sessionFromRequest } from "@/lib/request-session";
+import { ssoOnly } from "@/lib/session";
 
 const PUBLIC = ["/login", "/api/auth/login", "/api/auth/sso"];
 
@@ -27,12 +28,15 @@ export async function middleware(request: NextRequest) {
       return withFrameHeaders(NextResponse.next());
     }
 
-    const token = request.cookies.get(sessionCookieName())?.value;
-    const session = await verifySession(token);
+    const session = await sessionFromRequest(request);
     if (session) return withFrameHeaders(NextResponse.next());
 
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ ok: false, error: "Access denied" }, { status: 403 });
+    }
+
+    if (pathname === "/") {
+      return withFrameHeaders(NextResponse.next());
     }
 
     return accessDeniedResponse();
@@ -44,8 +48,7 @@ export async function middleware(request: NextRequest) {
     return response;
   }
 
-  const token = request.cookies.get(sessionCookieName())?.value;
-  const session = await verifySession(token);
+  const session = await sessionFromRequest(request);
   if (session) return response;
 
   if (pathname.startsWith("/api/")) {
