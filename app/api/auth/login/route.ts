@@ -12,10 +12,7 @@ export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
   if (ssoOnly()) {
-    return NextResponse.json(
-      { ok: false, error: "Direct login is disabled. Open this app from ERPNext." },
-      { status: 403 }
-    );
+    return NextResponse.json({ ok: false, error: "Access denied" }, { status: 403 });
   }
 
   if (!authConfigured()) {

@@ -65,6 +65,24 @@
   cursor: wait;
 }
 
+.denied {
+  text-align: center;
+  padding: 32px;
+}
+
+.denied h1 {
+  margin: 0 0 8px;
+  font-size: 48px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.denied p {
+  margin: 0;
+  font-size: 16px;
+  color: #64748b;
+}
+
 .error {
   background: #fff7ed;
   border: 1px solid #fed7aa;

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { accessDeniedResponse } from "@/lib/access-denied";
 import { hasAllowedRole } from "@/lib/frappe-login";
 import {
   allowedRoles,
@@ -61,14 +62,10 @@ async function userFromSid(sid: string) {
   return { user, full_name: fullName, roles };
 }
 
-/**
- * SSO entry for Frappe iframe:
- * /api/auth/sso?sid=FRAPPE_SID&next=/
- * or /api/auth/sso?token=HMAC_BRIDGE&next=/
- */
+/** SSO entry for Frappe iframe: /api/auth/sso?sid=FRAPPE_SID&next=/ */
 export async function GET(req: NextRequest) {
   if (!authConfigured()) {
-    return NextResponse.redirect(new URL(`/login?error=auth_not_configured`, req.url));
+    return accessDeniedResponse();
   }
 
   const next = req.nextUrl.searchParams.get("next") || "/";
@@ -82,11 +79,11 @@ export async function GET(req: NextRequest) {
 
   if (sid) {
     if (!baseUrl()) {
-      return NextResponse.redirect(new URL(`/login?error=missing_frappe_url`, req.url));
+      return accessDeniedResponse();
     }
     const fromSid = await userFromSid(sid);
     if (!fromSid) {
-      return NextResponse.redirect(new URL(`/login?error=invalid_frappe_session`, req.url));
+      return accessDeniedResponse();
     }
     user = fromSid.user;
     fullName = fromSid.full_name;
@@ -94,18 +91,18 @@ export async function GET(req: NextRequest) {
   } else if (token) {
     const bridge = await verifyBridgeToken(token);
     if (!bridge) {
-      return NextResponse.redirect(new URL(`/login?error=invalid_sso`, req.url));
+      return accessDeniedResponse();
     }
     user = bridge.user;
     fullName = bridge.full_name || bridge.user;
-    roles = allowedRoles(); // bridge token already minted for allowed desk users
+    roles = allowedRoles();
   } else {
-    return NextResponse.redirect(new URL(`/login?error=missing_sso`, req.url));
+    return accessDeniedResponse();
   }
 
   const allowed = allowedRoles();
   if (sid && !hasAllowedRole(roles, allowed)) {
-    return NextResponse.redirect(new URL(`/login?error=forbidden_role`, req.url));
+    return accessDeniedResponse();
   }
 
   const session = await signSession({ user, full_name: fullName, via: "sso" });
