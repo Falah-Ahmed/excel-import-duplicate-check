@@ -27,6 +27,22 @@ export function clearClientSessionToken() {
   }
 }
 
+export function bootSessionFromUrl() {
+  if (typeof window === "undefined") return;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const token = (params.get("t") || "").trim();
+    if (!token) return;
+    setClientSessionToken(token);
+    params.delete("t");
+    const qs = params.toString();
+    const next = window.location.pathname + (qs ? `?${qs}` : "");
+    window.history.replaceState({}, "", next);
+  } catch {
+    // ignore
+  }
+}
+
 export function authFetch(input: RequestInfo | URL, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
   const token = getClientSessionToken();

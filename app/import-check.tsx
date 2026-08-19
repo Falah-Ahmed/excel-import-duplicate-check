@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
-import { authFetch, clearClientSessionToken } from "@/lib/client-session";
+import { authFetch, bootSessionFromUrl, clearClientSessionToken } from "@/lib/client-session";
 import { formatBytes, sheetToRows, type ColumnMap } from "@/lib/excel-map";
 import type { CompareResponse, CompareResult, ExcelRow, RecordStatus } from "@/lib/types";
 import styles from "./import-check.module.css";
@@ -43,6 +43,7 @@ export default function ImportCheck() {
   const pageSize = 10;
 
   useEffect(() => {
+    bootSessionFromUrl();
     authFetch("/api/compare", {
       method: "POST",
       headers: { "Content-Type": "application/json" },

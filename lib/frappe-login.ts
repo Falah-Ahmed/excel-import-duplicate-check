@@ -1,4 +1,32 @@
 const base = () => (process.env.FRAPPE_BASE_URL || "").replace(/\/$/, "").trim();
+const apiKey = () => (process.env.FRAPPE_API_KEY || "").trim();
+const apiSecret = () => (process.env.FRAPPE_API_SECRET || "").trim();
+
+export function sessionCookieHeader(sid: string) {
+  return `sid=${sid}; system_user=yes`;
+}
+
+export async function fetchRolesForUser(user: string): Promise<string[]> {
+  const key = apiKey();
+  const secret = apiSecret();
+  if (!key || !secret || !user) return [];
+  try {
+    const url = `${base()}/api/method/frappe.core.doctype.user.user.get_roles?uid=${encodeURIComponent(user)}`;
+    const res = await fetch(url, {
+      headers: {
+        Accept: "application/json",
+        Authorization: `token ${key}:${secret}`,
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    const json = await res.json();
+    if (Array.isArray(json.message)) return json.message.filter(Boolean) as string[];
+    return [];
+  } catch {
+    return [];
+  }
+}
 
 export async function fetchRolesFromCookie(cookieHeader: string): Promise<string[]> {
   if (!cookieHeader) return [];

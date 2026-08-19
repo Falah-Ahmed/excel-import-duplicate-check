@@ -16,8 +16,12 @@ function secret() {
   return (process.env.AUTH_SECRET || process.env.FRAPPE_API_SECRET || "").trim();
 }
 
+export function skipRoleCheck(): boolean {
+  return (process.env.AUTH_SKIP_ROLE_CHECK || "").trim() === "1";
+}
+
 export function allowedRoles(): string[] {
-  return (process.env.AUTH_ALLOWED_ROLES || "System Manager,Admin")
+  return (process.env.AUTH_ALLOWED_ROLES || "System Manager,Administrator,Admin")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);

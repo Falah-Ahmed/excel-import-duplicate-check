@@ -1,12 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { accessDeniedResponse } from "@/lib/access-denied";
-import { fetchRolesFromCookie, hasAllowedRole } from "@/lib/frappe-login";
+import {
+  fetchRolesForUser,
+  fetchRolesFromCookie,
+  hasAllowedRole,
+  sessionCookieHeader,
+} from "@/lib/frappe-login";
 import {
   allowedRoles,
   authConfigured,
   sessionCookieName,
   sessionCookieOptions,
   signSession,
+  skipRoleCheck,
   verifyBridgeToken,
 } from "@/lib/session";
 
@@ -17,7 +23,7 @@ function baseUrl() {
 }
 
 async function userFromSid(sid: string) {
-  const cookie = `sid=${sid}`;
+  const cookie = sessionCookieHeader(sid);
   const whoRes = await fetch(`${baseUrl()}/api/method/frappe.auth.get_logged_user`, {
     headers: { Accept: "application/json", Cookie: cookie },
     cache: "no-store",
@@ -43,12 +49,18 @@ async function userFromSid(sid: string) {
     // ignore
   }
 
-  const roles = await fetchRolesFromCookie(cookie);
+  let roles = await fetchRolesFromCookie(cookie);
+  if (!roles.length) roles = await fetchRolesForUser(user);
   return { user, full_name: fullName, roles };
 }
 
 function ssoBootstrapHtml(token: string, nextPath: string) {
   const key = sessionCookieName();
+  const dest =
+    nextPath +
+    (nextPath.includes("?") ? "&" : "?") +
+    "t=" +
+    encodeURIComponent(token);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -56,7 +68,7 @@ function ssoBootstrapHtml(token: string, nextPath: string) {
   <title>Signing in…</title>
   <script>
     try { sessionStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(token)}); } catch (e) {}
-    location.replace(${JSON.stringify(nextPath)});
+    location.replace(${JSON.stringify(dest)});
   </script>
 </head>
 <body></body>
@@ -102,7 +114,7 @@ export async function GET(req: NextRequest) {
   }
 
   const allowed = allowedRoles();
-  if (sid && !hasAllowedRole(roles, allowed)) {
+  if (sid && !skipRoleCheck() && !hasAllowedRole(roles, allowed)) {
     return accessDeniedResponse();
   }
 
