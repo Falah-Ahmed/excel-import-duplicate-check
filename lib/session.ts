@@ -4,8 +4,13 @@ const MAX_AGE_SEC = 60 * 60 * 12; // 12 hours
 export type SessionPayload = {
   user: string;
   full_name?: string;
+  via?: "sso" | "password";
   exp: number;
 };
+
+export function ssoOnly(): boolean {
+  return (process.env.AUTH_SSO_ONLY || "1").trim() !== "0";
+}
 
 function secret() {
   return (process.env.AUTH_SECRET || process.env.FRAPPE_API_SECRET || "").trim();
@@ -87,6 +92,7 @@ export async function verifySession(
   try {
     const payload = JSON.parse(stringFromB64url(data)) as SessionPayload;
     if (!payload.user || !payload.exp || payload.exp < Math.floor(Date.now() / 1000)) return null;
+    if (ssoOnly() && payload.via !== "sso") return null;
     return payload;
   } catch {
     return null;

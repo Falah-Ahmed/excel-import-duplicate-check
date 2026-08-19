@@ -5,11 +5,19 @@ import {
   authConfigured,
   sessionCookieOptions,
   signSession,
+  ssoOnly,
 } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(req: NextRequest) {
+  if (ssoOnly()) {
+    return NextResponse.json(
+      { ok: false, error: "Direct login is disabled. Open this app from ERPNext." },
+      { status: 403 }
+    );
+  }
+
   if (!authConfigured()) {
     return NextResponse.json(
       { ok: false, error: "AUTH_SECRET is not set on Vercel" },
@@ -55,6 +63,7 @@ export async function POST(req: NextRequest) {
     const token = await signSession({
       user: result.user,
       full_name: result.full_name,
+      via: "password",
     });
     const res = NextResponse.json({
       ok: true,

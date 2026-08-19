@@ -108,7 +108,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL(`/login?error=forbidden_role`, req.url));
   }
 
-  const session = await signSession({ user, full_name: fullName });
+  const session = await signSession({ user, full_name: fullName, via: "sso" });
   const res = NextResponse.redirect(new URL(safeNext, req.url));
   const cookie = sessionCookieOptions(session);
   res.cookies.set(cookie.name, cookie.value, cookie);

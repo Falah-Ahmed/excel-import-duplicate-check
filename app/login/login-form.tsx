@@ -4,12 +4,32 @@ import { FormEvent, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import styles from "./login.module.css";
 
-export default function LoginForm() {
+const ERROR_MESSAGES: Record<string, string> = {
+  auth_not_configured: "Server auth is not configured (AUTH_SECRET missing on Vercel).",
+  missing_frappe_url: "Server is missing FRAPPE_BASE_URL.",
+  invalid_frappe_session: "Your ERPNext session expired. Log in to ERPNext and open this app again.",
+  invalid_sso: "SSO link is invalid or expired.",
+  missing_sso: "No ERPNext session was found.",
+  forbidden_role: "Your ERPNext user does not have permission to open this app.",
+};
+
+function formatError(code: string) {
+  return ERROR_MESSAGES[code] || code.replace(/_/g, " ");
+}
+
+type Props = {
+  ssoOnly: boolean;
+  frappeUrl?: string;
+  title: string;
+};
+
+export default function LoginForm({ ssoOnly, frappeUrl, title }: Props) {
   const router = useRouter();
   const params = useSearchParams();
+  const errorCode = params.get("error") || "";
   const [usr, setUsr] = useState("");
   const [pwd, setPwd] = useState("");
-  const [error, setError] = useState(params.get("error") || "");
+  const [error, setError] = useState(errorCode ? formatError(errorCode) : "");
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(e: FormEvent) {
@@ -37,10 +57,30 @@ export default function LoginForm() {
     }
   }
 
+  if (ssoOnly) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.card}>
+          <h1>{title}</h1>
+          <p>
+            This app only works when opened from ERPNext. Log in to ERPNext, then open the
+            workspace that embeds this tool.
+          </p>
+          {error && <div className={styles.error}>{error}</div>}
+          {frappeUrl ? (
+            <a className={styles.link} href={frappeUrl} target="_blank" rel="noopener noreferrer">
+              Open ERPNext
+            </a>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={styles.page}>
       <form className={styles.card} onSubmit={onSubmit}>
-        <h1>Duplicate check login</h1>
+        <h1>{title}</h1>
         <p>Sign in with your Frappe account to open the duplicate check.</p>
         {error && <div className={styles.error}>{error}</div>}
         <label>
