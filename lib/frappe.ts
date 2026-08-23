@@ -296,8 +296,8 @@ function mapFamilyRow(row: Record<string, unknown>, parentHint?: string): System
     display_name: familyName
       ? `${familyName} (Family of ${parent || "—"})`
       : `Family Member ${id || parent}`,
-    // Open Family Member form directly (not parent Registered People)
-    url: id ? familyUrl(id) : parent ? parentUrl(parent) : "#",
+    // Link to parent Registered People doc (e.g. /app/registered-people/DIH2)
+    url: parent ? parentUrl(parent) : id ? familyUrl(id) : "#",
     source: FAMILY_DOCTYPE,
     parent: parent || undefined,
   };

@@ -509,39 +509,56 @@ function getDeskFrappe(): {
   return null;
 }
 
+function resolveRegisteredPeopleName(row: CompareResult): string {
+  // Family match → parent id (e.g. DIH2). Parent match → document id.
+  const fromParent = (row.existing_parent || "").trim();
+  if (fromParent) return fromParent;
+
+  const fromId = (row.existing_id || "").trim();
+  // Parse .../app/registered-people/DIH2
+  const fromUrl = (row.existing_url || "").trim();
+  if (fromUrl && fromUrl !== "#") {
+    try {
+      const path = fromUrl.includes("://")
+        ? new URL(fromUrl).pathname
+        : fromUrl;
+      const parts = path.split("/").filter(Boolean);
+      // ["app", "registered-people", "DIH2"]
+      if (parts.length >= 3 && parts[0] === "app") {
+        const doc = decodeURIComponent(parts[parts.length - 1] || "");
+        if (doc && doc !== "registered-people" && !doc.includes(" ")) {
+          // Prefer URL doc name when existing_id looks like a child name / display
+          if (!fromId || fromId !== doc) {
+            // If URL has a real doc name, use it
+            if (/^[A-Z0-9][A-Z0-9_-]*$/i.test(doc)) return doc;
+          }
+          return doc;
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return fromId;
+}
+
 function openExistingRecord(
   row: CompareResult,
   registerDoctype: string,
-  familyDoctype: string,
+  _familyDoctype: string,
   baseUrl?: string
 ) {
-  const isFamily =
-    Boolean(row.existing_parent) ||
-    (row.existing_source || "") === familyDoctype;
+  void _familyDoctype;
+  // Always open Registered People document (e.g. /app/registered-people/DIH2)
+  const docName = resolveRegisteredPeopleName(row);
+  if (!docName) return;
 
-  const doctype = isFamily ? familyDoctype : registerDoctype;
-  const formName = (row.existing_id || "").trim();
-  if (!formName) {
-    if (row.existing_url && row.existing_url !== "#") {
-      window.open(row.existing_url, "_blank", "noopener,noreferrer");
-    }
-    return;
-  }
+  const base = (baseUrl || "").replace(/\/$/, "") || "https://v2.the-nfp.org";
+  const slug = registerDoctype.toLowerCase().replace(/\s+/g, "-");
+  const url = `${base}/app/${slug}/${encodeURIComponent(docName)}`;
 
-  const desk = getDeskFrappe();
-  if (desk) {
-    try {
-      // Open the exact document form (not the list)
-      desk.set_route("Form", doctype, formName);
-      return;
-    } catch {
-      // fallback below
-    }
-  }
-
-  const slug = doctype.toLowerCase().replace(/\s+/g, "-");
-  const url = `${(baseUrl || "").replace(/\/$/, "")}/app/${slug}/${encodeURIComponent(formName)}`;
-  // Same-tab in top window when possible so Desk opens the form
+  // Prefer full document URL in Desk top window (nested iframes break set_route)
   try {
     if (window.top && window.top !== window) {
       window.top.location.href = url;
@@ -550,7 +567,18 @@ function openExistingRecord(
   } catch {
     // ignore
   }
-  window.open(url, "_blank", "noopener,noreferrer");
+
+  const desk = getDeskFrappe();
+  if (desk) {
+    try {
+      desk.set_route("Form", registerDoctype, docName);
+      return;
+    } catch {
+      // fallback
+    }
+  }
+
+  window.location.href = url;
 }
 
 function ResultRow({
