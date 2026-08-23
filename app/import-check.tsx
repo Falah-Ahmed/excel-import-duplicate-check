@@ -38,7 +38,6 @@ export default function ImportCheck() {
   const [tab, setTab] = useState<Tab>("all");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const [message, setMessage] = useState<string | null>(null);
   const [denied, setDenied] = useState(false);
   const pageSize = 10;
 
@@ -55,7 +54,6 @@ export default function ImportCheck() {
 
   const runCompare = useCallback(async (parsedRows: ExcelRow[]) => {
     setLoading(true);
-    setMessage(null);
     try {
       const res = await authFetch("/api/compare", {
         method: "POST",
@@ -68,13 +66,7 @@ export default function ImportCheck() {
       }
       const json: CompareResponse = await res.json();
       setCompare(json);
-      if (json.error) {
-        setMessage(json.demo ? `Demo mode — full error:\n\n${json.error}` : json.error);
-      } else if (json.warning) {
-        setMessage(json.warning);
-      }
     } catch {
-      setMessage("Compare request failed");
       setCompare(null);
     } finally {
       setLoading(false);
@@ -112,7 +104,6 @@ export default function ImportCheck() {
       if (!file) return;
       const ext = file.name.split(".").pop()?.toLowerCase();
       if (!ext || !["xlsx", "xls", "csv"].includes(ext)) {
-        setMessage("Please upload XLSX, XLS, or CSV");
         return;
       }
       void parseFile(file);
@@ -141,7 +132,6 @@ export default function ImportCheck() {
   async function importNewOnly() {
     if (!rows.length || !compare) return;
     setImporting(true);
-    setMessage(null);
     try {
       const res = await authFetch("/api/import", {
         method: "POST",
@@ -153,22 +143,11 @@ export default function ImportCheck() {
         return;
       }
       const json = await res.json();
-      if (!json.ok) {
-        const detail =
-          Array.isArray(json.errors) && json.errors.length
-            ? json.errors.map((e: { row: number; message: string }) => `Row ${e.row}: ${e.message}`).join("\n")
-            : json.error || "Import failed";
-        setMessage(detail);
-        return;
+      if (json.ok) {
+        await runCompare(rows);
       }
-      const failDetail =
-        Array.isArray(json.errors) && json.errors.length
-          ? `\n${json.errors.map((e: { row: number; message: string }) => `Row ${e.row}: ${e.message}`).join("\n")}`
-          : "";
-      setMessage(`Imported ${json.imported} new record(s). Failed: ${json.failed}.${failDetail}`);
-      await runCompare(rows);
     } catch {
-      setMessage("Import request failed");
+      // ignore — error details UI removed
     } finally {
       setImporting(false);
     }
@@ -220,7 +199,6 @@ export default function ImportCheck() {
     setTab("all");
     setSearch("");
     setPage(1);
-    setMessage(null);
     if (inputRef.current) inputRef.current.value = "";
   }
 
