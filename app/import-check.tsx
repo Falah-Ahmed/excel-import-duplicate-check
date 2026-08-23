@@ -470,15 +470,21 @@ export default function ImportCheck() {
 }
 
 function resolveRegisteredPeopleName(row: CompareResult): string {
-  const fromParent = (row.existing_parent || "").trim();
-  if (fromParent) return fromParent;
+  const candidates = [
+    row.existing_parent,
+    row.existing_id,
+  ];
 
-  const fromUrl = (row.existing_url || "").trim();
+  for (const c of candidates) {
+    const v = String(c || "").trim();
+    if (v && v !== "—" && v !== "#") return v;
+  }
+
+  const fromUrl = String(row.existing_url || "").trim();
   if (fromUrl && fromUrl !== "#") {
     try {
       const path = fromUrl.includes("://") ? new URL(fromUrl).pathname : fromUrl;
       const parts = path.split("/").filter(Boolean);
-      // app / registered-people / DIH2
       if (parts.length >= 3 && parts[0] === "app") {
         const doc = decodeURIComponent(parts[parts.length - 1] || "").trim();
         const listSlug = parts[parts.length - 2] || "";
@@ -489,7 +495,7 @@ function resolveRegisteredPeopleName(row: CompareResult): string {
     }
   }
 
-  return (row.existing_id || "").trim();
+  return "";
 }
 
 function documentHref(
@@ -519,6 +525,8 @@ function ResultRow({
   const isDup =
     row.status === "exact_duplicate" || row.status === "possible_duplicate";
   const href = documentHref(row, registerDoctype, baseUrl);
+  // Show eye for any matched row (has existing record), not only when href builds
+  const showOpen = Boolean(href) || (isDup && row.existing_record && row.existing_record !== "—");
 
   return (
     <tr className={isDup ? styles.dupRow : undefined}>
@@ -544,6 +552,10 @@ function ResultRow({
           >
             👁
           </a>
+        ) : showOpen ? (
+          <span className={styles.iconBtnDisabled} title="Missing document id">
+            👁
+          </span>
         ) : (
           "—"
         )}

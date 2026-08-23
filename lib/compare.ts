@@ -1,6 +1,6 @@
 import type { CompareResult, CompareSummary, ExcelRow, RecordStatus } from "./types";
 import type { SystemRecord } from "./frappe";
-import { FAMILY_DOCTYPE } from "./frappe";
+import { FAMILY_DOCTYPE, REGISTER_DOCTYPE } from "./frappe";
 import {
   namesMatch,
   normalizeArabic,
@@ -125,6 +125,16 @@ export function compareRows(rows: ExcelRow[], systemRecords: SystemRecord[]): {
     const primary =
       matches.find((m) => m.source === FAMILY_DOCTYPE || Boolean(m.parent)) || matches[0];
 
+    // Document to open in Desk: parent Registered People name (e.g. DIH2)
+    const openId = String(primary?.parent || primary?.name || "").trim();
+    const slug = REGISTER_DOCTYPE.toLowerCase().replace(/\s+/g, "-");
+    const openUrl =
+      (primary?.url && primary.url !== "#"
+        ? primary.url
+        : openId
+          ? `/app/${slug}/${encodeURIComponent(openId)}`
+          : "") || "";
+
     return {
       row: row.row,
       name: row.name || row.name_ar || "—",
@@ -134,10 +144,10 @@ export function compareRows(rows: ExcelRow[], systemRecords: SystemRecord[]): {
       status,
       matched_by: matchedBy.length ? matchedBy.join(" + ") : "—",
       existing_record: primary?.display_name || "—",
-      existing_id: primary?.name,
-      existing_url: primary?.url,
+      existing_id: openId || undefined,
+      existing_url: openUrl || undefined,
       existing_source: primary?.source,
-      existing_parent: primary?.parent,
+      existing_parent: primary?.parent ? String(primary.parent) : undefined,
     };
   });
 
