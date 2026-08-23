@@ -163,19 +163,15 @@ export default function ImportCheck() {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
 
-    const dupRows = new Set(
-      compare.results
-        .filter(
-          (r) => r.status === "exact_duplicate" || r.status === "possible_duplicate"
-        )
-        .map((r) => r.row)
-    );
-
-    // Full original Excel: every uploaded column + every row
-    const cols =
-      headers.length > 0
-        ? headers
-        : ["passport nu", "name", "ID", "phone nu"];
+    const byRow = new Map(compare.results.map((r) => [r.row, r]));
+    const cols = [
+      "Excel Row",
+      "Name",
+      "Passport No.",
+      "Phone Number",
+      "ID Number",
+      "Matched By",
+    ];
 
     const headerCells = cols
       .map(
@@ -186,28 +182,30 @@ export default function ImportCheck() {
       )
       .join("");
 
+    // All imported rows (e.g. 100), yellow only when duplicate
     const bodyRows = rows
       .map((excelRow) => {
-        const isDup = dupRows.has(excelRow.row);
+        const result = byRow.get(excelRow.row);
+        const isDup =
+          result?.status === "exact_duplicate" ||
+          result?.status === "possible_duplicate";
         const bg = isDup ? "background-color:#FFFF00;" : "";
-        const cells = cols
-          .map((h) => {
-            const val =
-              excelRow.raw?.[h] ??
-              (h.toLowerCase().includes("passport")
-                ? excelRow.passport
-                : h.toLowerCase() === "name" || h.toLowerCase().includes("name")
-                  ? excelRow.name
-                  : h.toLowerCase().includes("phone")
-                    ? excelRow.phone
-                    : h.toLowerCase().includes("id")
-                      ? excelRow.id_number
-                      : "") ??
-              "";
-            return `<td style="border:1px solid #ccc;padding:6px 10px;${bg}">${escapeHtml(
-              val
-            )}</td>`;
-          })
+        const cells = [
+          excelRow.row,
+          excelRow.name || "",
+          excelRow.passport || "",
+          excelRow.phone || "",
+          excelRow.id_number || "",
+          result?.matched_by && result.matched_by !== "—"
+            ? result.matched_by
+            : "",
+        ]
+          .map(
+            (v) =>
+              `<td style="border:1px solid #ccc;padding:6px 10px;${bg}">${escapeHtml(
+                v
+              )}</td>`
+          )
           .join("");
         return `<tr>${cells}</tr>`;
       })
@@ -471,6 +469,46 @@ export default function ImportCheck() {
   );
 }
 
+function getDeskFrappe(): {
+  set_route: (...args: string[]) => void;
+} | null {
+  const frames: Window[] = [];
+  try {
+    frames.push(window);
+    if (window.parent && window.parent !== window) frames.push(window.parent);
+    if (window.parent?.parent && window.parent.parent !== window.parent) {
+      frames.push(window.parent.parent);
+    }
+    if (window.top && window.top !== window) frames.push(window.top);
+  } catch {
+    // ignore
+  }
+
+  for (const w of frames) {
+    try {
+      // Desk has .desk or boot.sitename; website frappe often has no desk
+      // @ts-expect-error cross-frame
+      const f = w.frappe;
+      if (f && typeof f.set_route === "function" && (f.desk || f._route || f.router)) {
+        return f;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  for (const w of frames) {
+    try {
+      // @ts-expect-error cross-frame
+      const f = w.frappe;
+      if (f && typeof f.set_route === "function") return f;
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
 function openExistingRecord(
   row: CompareResult,
   registerDoctype: string,
@@ -482,29 +520,37 @@ function openExistingRecord(
     (row.existing_source || "") === familyDoctype;
 
   const doctype = isFamily ? familyDoctype : registerDoctype;
-  const formName = row.existing_id;
-
-  if (formName) {
-    try {
-      // @ts-expect-error parent Desk
-      if (window.parent?.frappe?.set_route) {
-        // @ts-expect-error parent Desk
-        window.parent.frappe.set_route("Form", doctype, formName);
-        return;
-      }
-    } catch {
-      // fallback below
+  const formName = (row.existing_id || "").trim();
+  if (!formName) {
+    if (row.existing_url && row.existing_url !== "#") {
+      window.open(row.existing_url, "_blank", "noopener,noreferrer");
     }
-
-    const slug = doctype.toLowerCase().replace(/\s+/g, "-");
-    const url = `${(baseUrl || "").replace(/\/$/, "")}/app/${slug}/${encodeURIComponent(formName)}`;
-    window.open(url, "_blank", "noopener,noreferrer");
     return;
   }
 
-  if (row.existing_url && row.existing_url !== "#") {
-    window.open(row.existing_url, "_blank", "noopener,noreferrer");
+  const desk = getDeskFrappe();
+  if (desk) {
+    try {
+      // Open the exact document form (not the list)
+      desk.set_route("Form", doctype, formName);
+      return;
+    } catch {
+      // fallback below
+    }
   }
+
+  const slug = doctype.toLowerCase().replace(/\s+/g, "-");
+  const url = `${(baseUrl || "").replace(/\/$/, "")}/app/${slug}/${encodeURIComponent(formName)}`;
+  // Same-tab in top window when possible so Desk opens the form
+  try {
+    if (window.top && window.top !== window) {
+      window.top.location.href = url;
+      return;
+    }
+  } catch {
+    // ignore
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 function ResultRow({
@@ -520,7 +566,7 @@ function ResultRow({
 }) {
   const isDup =
     row.status === "exact_duplicate" || row.status === "possible_duplicate";
-  const canOpen = Boolean(row.existing_id || row.existing_url);
+  const canOpen = Boolean(row.existing_id || (row.existing_url && row.existing_url !== "#"));
 
   return (
     <tr className={isDup ? styles.dupRow : undefined}>
@@ -530,22 +576,7 @@ function ResultRow({
       <td>{row.phone}</td>
       <td>{row.id_number}</td>
       <td>{row.matched_by}</td>
-      <td>
-        <div className={styles.existingCell}>
-          <span>{row.existing_record}</span>
-          {canOpen ? (
-            <button
-              type="button"
-              className={styles.iconBtn}
-              onClick={() =>
-                openExistingRecord(row, registerDoctype, familyDoctype, baseUrl)
-              }
-            >
-              👁 Open
-            </button>
-          ) : null}
-        </div>
-      </td>
+      <td>{row.existing_record}</td>
       <td>{row.existing_source || "—"}</td>
       <td>
         <span className={`${styles.badge} ${styles[row.status]}`}>{STATUS_LABEL[row.status]}</span>
@@ -555,7 +586,7 @@ function ResultRow({
           <button
             type="button"
             className={styles.iconBtn}
-            title="Open matched record"
+            title="Open duplicate document"
             onClick={() =>
               openExistingRecord(row, registerDoctype, familyDoctype, baseUrl)
             }
