@@ -469,116 +469,39 @@ export default function ImportCheck() {
   );
 }
 
-function getDeskFrappe(): {
-  set_route: (...args: string[]) => void;
-} | null {
-  const frames: Window[] = [];
-  try {
-    frames.push(window);
-    if (window.parent && window.parent !== window) frames.push(window.parent);
-    if (window.parent?.parent && window.parent.parent !== window.parent) {
-      frames.push(window.parent.parent);
-    }
-    if (window.top && window.top !== window) frames.push(window.top);
-  } catch {
-    // ignore
-  }
-
-  for (const w of frames) {
-    try {
-      // Desk has .desk or boot.sitename; website frappe often has no desk
-      // @ts-expect-error cross-frame
-      const f = w.frappe;
-      if (f && typeof f.set_route === "function" && (f.desk || f._route || f.router)) {
-        return f;
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  for (const w of frames) {
-    try {
-      // @ts-expect-error cross-frame
-      const f = w.frappe;
-      if (f && typeof f.set_route === "function") return f;
-    } catch {
-      // ignore
-    }
-  }
-  return null;
-}
-
 function resolveRegisteredPeopleName(row: CompareResult): string {
-  // Family match → parent id (e.g. DIH2). Parent match → document id.
   const fromParent = (row.existing_parent || "").trim();
   if (fromParent) return fromParent;
 
-  const fromId = (row.existing_id || "").trim();
-  // Parse .../app/registered-people/DIH2
   const fromUrl = (row.existing_url || "").trim();
   if (fromUrl && fromUrl !== "#") {
     try {
-      const path = fromUrl.includes("://")
-        ? new URL(fromUrl).pathname
-        : fromUrl;
+      const path = fromUrl.includes("://") ? new URL(fromUrl).pathname : fromUrl;
       const parts = path.split("/").filter(Boolean);
-      // ["app", "registered-people", "DIH2"]
+      // app / registered-people / DIH2
       if (parts.length >= 3 && parts[0] === "app") {
-        const doc = decodeURIComponent(parts[parts.length - 1] || "");
-        if (doc && doc !== "registered-people" && !doc.includes(" ")) {
-          // Prefer URL doc name when existing_id looks like a child name / display
-          if (!fromId || fromId !== doc) {
-            // If URL has a real doc name, use it
-            if (/^[A-Z0-9][A-Z0-9_-]*$/i.test(doc)) return doc;
-          }
-          return doc;
-        }
+        const doc = decodeURIComponent(parts[parts.length - 1] || "").trim();
+        const listSlug = parts[parts.length - 2] || "";
+        if (doc && doc !== listSlug) return doc;
       }
     } catch {
       // ignore
     }
   }
 
-  return fromId;
+  return (row.existing_id || "").trim();
 }
 
-function openExistingRecord(
+function documentHref(
   row: CompareResult,
   registerDoctype: string,
-  _familyDoctype: string,
   baseUrl?: string
-) {
-  void _familyDoctype;
-  // Always open Registered People document (e.g. /app/registered-people/DIH2)
+): string {
   const docName = resolveRegisteredPeopleName(row);
-  if (!docName) return;
-
-  const base = (baseUrl || "").replace(/\/$/, "") || "https://v2.the-nfp.org";
+  if (!docName) return "";
+  const base = (baseUrl || "https://v2.the-nfp.org").replace(/\/$/, "");
   const slug = registerDoctype.toLowerCase().replace(/\s+/g, "-");
-  const url = `${base}/app/${slug}/${encodeURIComponent(docName)}`;
-
-  // Prefer full document URL in Desk top window (nested iframes break set_route)
-  try {
-    if (window.top && window.top !== window) {
-      window.top.location.href = url;
-      return;
-    }
-  } catch {
-    // ignore
-  }
-
-  const desk = getDeskFrappe();
-  if (desk) {
-    try {
-      desk.set_route("Form", registerDoctype, docName);
-      return;
-    } catch {
-      // fallback
-    }
-  }
-
-  window.location.href = url;
+  return `${base}/app/${slug}/${encodeURIComponent(docName)}`;
 }
 
 function ResultRow({
@@ -592,9 +515,10 @@ function ResultRow({
   familyDoctype: string;
   baseUrl?: string;
 }) {
+  void familyDoctype;
   const isDup =
     row.status === "exact_duplicate" || row.status === "possible_duplicate";
-  const canOpen = Boolean(row.existing_id || (row.existing_url && row.existing_url !== "#"));
+  const href = documentHref(row, registerDoctype, baseUrl);
 
   return (
     <tr className={isDup ? styles.dupRow : undefined}>
@@ -610,17 +534,16 @@ function ResultRow({
         <span className={`${styles.badge} ${styles[row.status]}`}>{STATUS_LABEL[row.status]}</span>
       </td>
       <td className={styles.viewCol}>
-        {canOpen ? (
-          <button
-            type="button"
+        {href ? (
+          <a
             className={styles.iconBtn}
-            title="Open duplicate document"
-            onClick={() =>
-              openExistingRecord(row, registerDoctype, familyDoctype, baseUrl)
-            }
+            href={href}
+            target="_top"
+            rel="noopener noreferrer"
+            title={href}
           >
             👁
-          </button>
+          </a>
         ) : (
           "—"
         )}

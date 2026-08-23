@@ -422,19 +422,25 @@
 }
 
 .iconBtn {
-  border: 1px solid #d1d5db;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #93c5fd;
   background: #fff;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 16px;
   font-weight: 600;
-  padding: 4px 8px;
-  line-height: 1.2;
+  padding: 6px 10px;
+  line-height: 1;
   border-radius: 6px;
   color: #1d4ed8;
+  text-decoration: none;
+  min-width: 40px;
+  min-height: 32px;
 }
 
 .iconBtn:hover {
-  background: #eff6ff;
+  background: #dbeafe;
 }
 
 .btnGhost {
