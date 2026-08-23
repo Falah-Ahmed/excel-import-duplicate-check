@@ -154,7 +154,7 @@ export default function ImportCheck() {
   }
 
   function downloadReport() {
-    if (!compare?.results.length) return;
+    if (!compare?.results.length || !rows.length) return;
 
     const escapeHtml = (value: unknown) =>
       String(value ?? "")
@@ -163,17 +163,21 @@ export default function ImportCheck() {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
 
-    const headers = [
-      "Excel Row",
-      "Name",
-      "Passport No.",
-      "Phone Number",
-      "ID Number",
-      "Matched By",
-      "Existing System Record",
-    ];
+    const dupRows = new Set(
+      compare.results
+        .filter(
+          (r) => r.status === "exact_duplicate" || r.status === "possible_duplicate"
+        )
+        .map((r) => r.row)
+    );
 
-    const headerCells = headers
+    // Full original Excel: every uploaded column + every row
+    const cols =
+      headers.length > 0
+        ? headers
+        : ["passport nu", "name", "ID", "phone nu"];
+
+    const headerCells = cols
       .map(
         (h) =>
           `<th style="font-weight:bold;border:1px solid #ccc;padding:6px 10px;background:#f3f4f6;">${escapeHtml(
@@ -182,26 +186,28 @@ export default function ImportCheck() {
       )
       .join("");
 
-    const bodyRows = compare.results
-      .map((r) => {
-        const isDup =
-          r.status === "exact_duplicate" || r.status === "possible_duplicate";
+    const bodyRows = rows
+      .map((excelRow) => {
+        const isDup = dupRows.has(excelRow.row);
         const bg = isDup ? "background-color:#FFFF00;" : "";
-        const cells = [
-          r.row,
-          r.name,
-          r.passport,
-          r.phone,
-          r.id_number,
-          r.matched_by,
-          r.existing_record,
-        ]
-          .map(
-            (v) =>
-              `<td style="border:1px solid #ccc;padding:6px 10px;${bg}">${escapeHtml(
-                v === "—" ? "" : v
-              )}</td>`
-          )
+        const cells = cols
+          .map((h) => {
+            const val =
+              excelRow.raw?.[h] ??
+              (h.toLowerCase().includes("passport")
+                ? excelRow.passport
+                : h.toLowerCase() === "name" || h.toLowerCase().includes("name")
+                  ? excelRow.name
+                  : h.toLowerCase().includes("phone")
+                    ? excelRow.phone
+                    : h.toLowerCase().includes("id")
+                      ? excelRow.id_number
+                      : "") ??
+              "";
+            return `<td style="border:1px solid #ccc;padding:6px 10px;${bg}">${escapeHtml(
+              val
+            )}</td>`;
+          })
           .join("");
         return `<tr>${cells}</tr>`;
       })
@@ -382,7 +388,6 @@ export default function ImportCheck() {
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th className={styles.viewCol}>View</th>
                   <th>Excel Row</th>
                   <th>Name</th>
                   <th>Passport No.</th>
@@ -392,6 +397,7 @@ export default function ImportCheck() {
                   <th>Existing System Record</th>
                   <th>Source</th>
                   <th>Status</th>
+                  <th className={styles.viewCol}>Open</th>
                 </tr>
               </thead>
               <tbody>
@@ -475,30 +481,30 @@ function openExistingRecord(
     Boolean(row.existing_parent) ||
     (row.existing_source || "") === familyDoctype;
 
-  // Family duplicate → open Family Member form (not Registered People)
   const doctype = isFamily ? familyDoctype : registerDoctype;
   const formName = row.existing_id;
-  if (!formName) return;
 
-  try {
-    // @ts-expect-error parent Desk
-    if (window.parent?.frappe?.set_route) {
+  if (formName) {
+    try {
       // @ts-expect-error parent Desk
-      window.parent.frappe.set_route("Form", doctype, formName);
-      return;
+      if (window.parent?.frappe?.set_route) {
+        // @ts-expect-error parent Desk
+        window.parent.frappe.set_route("Form", doctype, formName);
+        return;
+      }
+    } catch {
+      // fallback below
     }
-  } catch {
-    // cross-origin fallback below
+
+    const slug = doctype.toLowerCase().replace(/\s+/g, "-");
+    const url = `${(baseUrl || "").replace(/\/$/, "")}/app/${slug}/${encodeURIComponent(formName)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+    return;
   }
 
-  const slug = doctype.toLowerCase().replace(/\s+/g, "-");
-  const url =
-    isFamily && row.existing_id
-      ? `${(baseUrl || "").replace(/\/$/, "")}/app/${slug}/${encodeURIComponent(formName)}`
-      : row.existing_url && row.existing_url !== "#"
-        ? row.existing_url
-        : `${(baseUrl || "").replace(/\/$/, "")}/app/${slug}/${encodeURIComponent(formName)}`;
-  if (url && url !== "#") window.open(url, "_blank", "noopener,noreferrer");
+  if (row.existing_url && row.existing_url !== "#") {
+    window.open(row.existing_url, "_blank", "noopener,noreferrer");
+  }
 }
 
 function ResultRow({
@@ -512,40 +518,53 @@ function ResultRow({
   familyDoctype: string;
   baseUrl?: string;
 }) {
-  const canOpen = Boolean(row.existing_id);
+  const isDup =
+    row.status === "exact_duplicate" || row.status === "possible_duplicate";
+  const canOpen = Boolean(row.existing_id || row.existing_url);
 
   return (
-    <tr>
-      <td className={styles.viewCol}>
-        {canOpen ? (
-          <button
-            type="button"
-            className={styles.iconBtn}
-            title={
-              row.existing_parent || row.existing_source === familyDoctype
-                ? "Open Family Member"
-                : "Open existing record"
-            }
-            onClick={() =>
-              openExistingRecord(row, registerDoctype, familyDoctype, baseUrl)
-            }
-          >
-            👁 View
-          </button>
-        ) : (
-          "—"
-        )}
-      </td>
+    <tr className={isDup ? styles.dupRow : undefined}>
       <td>{row.row}</td>
       <td>{row.name}</td>
       <td>{row.passport}</td>
       <td>{row.phone}</td>
       <td>{row.id_number}</td>
       <td>{row.matched_by}</td>
-      <td>{row.existing_record}</td>
+      <td>
+        <div className={styles.existingCell}>
+          <span>{row.existing_record}</span>
+          {canOpen ? (
+            <button
+              type="button"
+              className={styles.iconBtn}
+              onClick={() =>
+                openExistingRecord(row, registerDoctype, familyDoctype, baseUrl)
+              }
+            >
+              👁 Open
+            </button>
+          ) : null}
+        </div>
+      </td>
       <td>{row.existing_source || "—"}</td>
       <td>
         <span className={`${styles.badge} ${styles[row.status]}`}>{STATUS_LABEL[row.status]}</span>
+      </td>
+      <td className={styles.viewCol}>
+        {canOpen ? (
+          <button
+            type="button"
+            className={styles.iconBtn}
+            title="Open matched record"
+            onClick={() =>
+              openExistingRecord(row, registerDoctype, familyDoctype, baseUrl)
+            }
+          >
+            👁
+          </button>
+        ) : (
+          "—"
+        )}
       </td>
     </tr>
   );

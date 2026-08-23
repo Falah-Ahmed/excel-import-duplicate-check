@@ -274,16 +274,29 @@
 
 .viewCol {
   position: sticky;
-  left: 0;
+  right: 0;
   z-index: 2;
-  background: #fff;
+  background: #eff6ff;
   white-space: nowrap;
-  min-width: 72px;
+  min-width: 56px;
+  text-align: center;
+  box-shadow: -4px 0 8px rgba(15, 23, 42, 0.06);
 }
 
 .table thead .viewCol {
-  background: #f9fafb;
+  background: #dbeafe;
   z-index: 3;
+}
+
+.existingCell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dupRow {
+  background: #fffbeb;
 }
 
 .table {
