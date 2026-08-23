@@ -307,67 +307,6 @@ export default function ImportCheck() {
             </div>
           </div>
         )}
-
-        {fileName && (
-          <div className={styles.mapBox}>
-            <h3>Column mapping (Excel → Frappe)</h3>
-            <p className={styles.mapSub}>
-              Key = Excel header · Value = Frappe fieldname. Family Member child table is also
-              checked using <code>family_name</code> (and passport / phone / ID if present).
-            </p>
-            <table className={styles.mapTable}>
-              <thead>
-                <tr>
-                  <th>Excel column (key)</th>
-                  <th>Maps to</th>
-                  <th>Frappe field (value)</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>{columnMap.name || "Name (not found)"}</td>
-                  <td>Name</td>
-                  <td>{compare?.config?.name_field || "full_name"}</td>
-                </tr>
-                <tr>
-                  <td>{columnMap.passport || "Passport No. (not found)"}</td>
-                  <td>Passport</td>
-                  <td>{compare?.config?.passport_field || "passport_number"}</td>
-                </tr>
-                <tr>
-                  <td>{columnMap.phone || "Phone Number (not found)"}</td>
-                  <td>Phone</td>
-                  <td>{compare?.config?.phone_field || "phone_number"}</td>
-                </tr>
-                <tr>
-                  <td>{columnMap.id_number || "ID Number (not found)"}</td>
-                  <td>ID Number</td>
-                  <td>{compare?.config?.id_field || "id_number"}</td>
-                </tr>
-                <tr>
-                  <td>Family Member → name</td>
-                  <td>Family name</td>
-                  <td>{compare?.config?.family_name_field || "name_3"}</td>
-                </tr>
-                <tr>
-                  <td>Family Member → passport</td>
-                  <td>Passport</td>
-                  <td>{compare?.config?.family_passport_field || "passport_number"}</td>
-                </tr>
-                <tr>
-                  <td>Family Member → phone</td>
-                  <td>Phone</td>
-                  <td>{compare?.config?.family_phone_field || "phone_number"}</td>
-                </tr>
-                <tr>
-                  <td>Family Member → ID</td>
-                  <td>ID Number</td>
-                  <td>{compare?.config?.family_id_field || "id_number"}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        )}
       </section>
 
       {compare && (
@@ -478,13 +417,6 @@ export default function ImportCheck() {
             </div>
           )}
         </section>
-      )}
-
-      {message && (
-        <div className={styles.hint}>
-          <div className={styles.hintTitle}>Error details</div>
-          <pre className={styles.hintBody}>{message}</pre>
-        </div>
       )}
 
       {compare && (
