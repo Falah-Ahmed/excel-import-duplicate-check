@@ -155,6 +155,7 @@ export default function ImportCheck() {
 
   function downloadReport() {
     if (!compare?.results.length) return;
+
     const header = [
       "Excel Row",
       "Name",
@@ -164,27 +165,65 @@ export default function ImportCheck() {
       "Status",
       "Matched By",
       "Existing Record",
+      "Source",
     ];
-    const lines = compare.results.map((r) =>
-      [
-        r.row,
-        r.name,
-        r.passport,
-        r.phone,
-        r.id_number,
-        STATUS_LABEL[r.status],
-        r.matched_by,
-        r.existing_record,
-      ]
-        .map((v) => `"${String(v).replace(/"/g, '""')}"`)
-        .join(",")
-    );
-    const csv = [header.join(","), ...lines].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+
+    const escapeXml = (value: unknown) =>
+      String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+
+    const rowsXml = compare.results
+      .map((r) => {
+        const isDup =
+          r.status === "exact_duplicate" || r.status === "possible_duplicate";
+        const style = isDup ? ' ss:StyleID="Yellow"' : "";
+        const cells = [
+          r.row,
+          r.name,
+          r.passport,
+          r.phone,
+          r.id_number,
+          STATUS_LABEL[r.status],
+          r.matched_by,
+          r.existing_record,
+          r.existing_source || "",
+        ]
+          .map((v) => `<Cell><Data ss:Type="String">${escapeXml(v)}</Data></Cell>`)
+          .join("");
+        return `<Row${style}>${cells}</Row>`;
+      })
+      .join("");
+
+    const headerXml = header
+      .map((h) => `<Cell ss:StyleID="Header"><Data ss:Type="String">${escapeXml(h)}</Data></Cell>`)
+      .join("");
+
+    const xml = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
+ <Styles>
+  <Style ss:ID="Header"><Font ss:Bold="1"/></Style>
+  <Style ss:ID="Yellow"><Interior ss:Color="#FFFF66" ss:Pattern="Solid"/></Style>
+ </Styles>
+ <Worksheet ss:Name="Duplicate Report">
+  <Table>
+   <Row ss:StyleID="Header">${headerXml}</Row>
+   ${rowsXml}
+  </Table>
+ </Worksheet>
+</Workbook>`;
+
+    const blob = new Blob([xml], { type: "application/vnd.ms-excel;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = "duplicate-report.csv";
+    a.download = "duplicate-report.xls";
     a.click();
     URL.revokeObjectURL(url);
   }
@@ -371,7 +410,12 @@ export default function ImportCheck() {
                 )}
                 {!loading &&
                   pageRows.map((row) => (
-                    <ResultRow key={row.row} row={row} />
+                    <ResultRow
+                      key={row.row}
+                      row={row}
+                      registerDoctype={compare.config?.register_doctype || "Registered People"}
+                      baseUrl={compare.config?.base_url}
+                    />
                   ))}
               </tbody>
             </table>
@@ -419,7 +463,45 @@ export default function ImportCheck() {
   );
 }
 
-function ResultRow({ row }: { row: CompareResult }) {
+function openExistingRecord(
+  row: CompareResult,
+  registerDoctype: string,
+  baseUrl?: string
+) {
+  // Family Member → open parent Registered People form
+  const formName = row.existing_parent || row.existing_id;
+  if (!formName) return;
+
+  try {
+    // @ts-expect-error parent Desk
+    if (window.parent?.frappe?.set_route) {
+      // @ts-expect-error parent Desk
+      window.parent.frappe.set_route("Form", registerDoctype, formName);
+      return;
+    }
+  } catch {
+    // cross-origin fallback below
+  }
+
+  const slug = registerDoctype.toLowerCase().replace(/\s+/g, "-");
+  const url =
+    row.existing_url && row.existing_url !== "#"
+      ? row.existing_url
+      : `${(baseUrl || "").replace(/\/$/, "")}/app/${slug}/${encodeURIComponent(formName)}`;
+  if (url && url !== "#") window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function ResultRow({
+  row,
+  registerDoctype,
+  baseUrl,
+}: {
+  row: CompareResult;
+  registerDoctype: string;
+  baseUrl?: string;
+}) {
+  const canOpen = Boolean(row.existing_parent || row.existing_id);
+
   return (
     <tr>
       <td>{row.row}</td>
@@ -434,10 +516,19 @@ function ResultRow({ row }: { row: CompareResult }) {
         <span className={`${styles.badge} ${styles[row.status]}`}>{STATUS_LABEL[row.status]}</span>
       </td>
       <td>
-        {row.existing_url && row.existing_url !== "#" ? (
-          <a href={row.existing_url} target="_blank" rel="noopener noreferrer" title="View record">
+        {canOpen ? (
+          <button
+            type="button"
+            className={styles.iconBtn}
+            title={
+              row.existing_parent
+                ? "Open family parent record"
+                : "Open existing record"
+            }
+            onClick={() => openExistingRecord(row, registerDoctype, baseUrl)}
+          >
             👁
-          </a>
+          </button>
         ) : (
           "—"
         )}

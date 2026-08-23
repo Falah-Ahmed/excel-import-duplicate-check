@@ -394,6 +394,19 @@
   cursor: not-allowed;
 }
 
+.iconBtn {
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 6px;
+  line-height: 1;
+}
+
+.iconBtn:hover {
+  opacity: 0.75;
+}
+
 .btnGhost {
   border: 1px solid #d1d5db;
   background: #fff;

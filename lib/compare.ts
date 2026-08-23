@@ -1,5 +1,6 @@
 import type { CompareResult, CompareSummary, ExcelRow, RecordStatus } from "./types";
 import type { SystemRecord } from "./frappe";
+import { FAMILY_DOCTYPE } from "./frappe";
 import {
   namesMatch,
   normalizeArabic,
@@ -121,7 +122,8 @@ export function compareRows(rows: ExcelRow[], systemRecords: SystemRecord[]): {
 
     const { matches, matchedBy } = findMatches(row, indexed);
     const status = classify(row, matches, matchedBy);
-    const primary = matches[0];
+    const primary =
+      matches.find((m) => m.source === FAMILY_DOCTYPE || Boolean(m.parent)) || matches[0];
 
     return {
       row: row.row,
@@ -135,6 +137,7 @@ export function compareRows(rows: ExcelRow[], systemRecords: SystemRecord[]): {
       existing_id: primary?.name,
       existing_url: primary?.url,
       existing_source: primary?.source,
+      existing_parent: primary?.parent,
     };
   });
 

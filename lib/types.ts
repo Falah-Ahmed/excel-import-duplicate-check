@@ -22,6 +22,8 @@ export type CompareResult = {
   existing_id?: string;
   existing_url?: string;
   existing_source?: string;
+  /** Parent Registered People name when match is a Family Member */
+  existing_parent?: string;
 };
 
 export type CompareSummary = {
