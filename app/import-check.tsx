@@ -163,17 +163,16 @@ export default function ImportCheck() {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
 
-    const byRow = new Map(compare.results.map((r) => [r.row, r]));
-    const cols = [
+    const byExcelRow = new Map(compare.results.map((r) => [r.row, r]));
+
+    const headerCells = [
       "Excel Row",
       "Name",
       "Passport No.",
       "Phone Number",
       "ID Number",
       "Matched By",
-    ];
-
-    const headerCells = cols
+    ]
       .map(
         (h) =>
           `<th style="font-weight:bold;border:1px solid #ccc;padding:6px 10px;background:#f3f4f6;">${escapeHtml(
@@ -182,23 +181,22 @@ export default function ImportCheck() {
       )
       .join("");
 
-    // All imported rows (e.g. 100), yellow only when duplicate
+    // ALL uploaded rows (e.g. 100), yellow only when duplicate
     const bodyRows = rows
       .map((excelRow) => {
-        const result = byRow.get(excelRow.row);
+        const result = byExcelRow.get(excelRow.row);
         const isDup =
           result?.status === "exact_duplicate" ||
           result?.status === "possible_duplicate";
         const bg = isDup ? "background-color:#FFFF00;" : "";
+        const matchedBy = isDup ? result?.matched_by || "" : "";
         const cells = [
           excelRow.row,
           excelRow.name || "",
           excelRow.passport || "",
           excelRow.phone || "",
           excelRow.id_number || "",
-          result?.matched_by && result.matched_by !== "—"
-            ? result.matched_by
-            : "",
+          matchedBy,
         ]
           .map(
             (v) =>
@@ -469,45 +467,79 @@ export default function ImportCheck() {
   );
 }
 
-function resolveRegisteredPeopleName(row: CompareResult): string {
-  const candidates = [
-    row.existing_parent,
-    row.existing_id,
-  ];
+function getDeskFrappe(): {
+  set_route: (...args: string[]) => void;
+} | null {
+  const candidates = [window.top, window.parent?.parent, window.parent];
+  for (const win of candidates) {
+    try {
+      // @ts-expect-error cross-frame Desk
+      const f = win?.frappe;
+      if (f && typeof f.set_route === "function") return f;
+    } catch {
+      // ignore blocked frame
+    }
+  }
+  return null;
+}
 
-  for (const c of candidates) {
-    const v = String(c || "").trim();
-    if (v && v !== "—" && v !== "#") return v;
+function openExistingRecord(
+  row: CompareResult,
+  registerDoctype: string,
+  familyDoctype: string,
+  baseUrl?: string
+) {
+  const isFamily =
+    Boolean(row.existing_parent) ||
+    (row.existing_source || "") === familyDoctype;
+
+  // Family match → Family Member doc; otherwise the Registered People doc itself
+  const doctype = isFamily ? familyDoctype : registerDoctype;
+  const formName = row.existing_id;
+  if (!formName) {
+    if (row.existing_url && row.existing_url !== "#") {
+      const desk = getDeskFrappe();
+      if (desk && baseUrl) {
+        try {
+          const path = new URL(row.existing_url, baseUrl).pathname;
+          // @ts-expect-error Desk
+          window.top.location.href = path.startsWith("/app/")
+            ? path
+            : row.existing_url;
+          return;
+        } catch {
+          // fall through
+        }
+      }
+      window.open(row.existing_url, "_blank", "noopener,noreferrer");
+    }
+    return;
   }
 
-  const fromUrl = String(row.existing_url || "").trim();
-  if (fromUrl && fromUrl !== "#") {
+  const desk = getDeskFrappe();
+  if (desk) {
     try {
-      const path = fromUrl.includes("://") ? new URL(fromUrl).pathname : fromUrl;
-      const parts = path.split("/").filter(Boolean);
-      if (parts.length >= 3 && parts[0] === "app") {
-        const doc = decodeURIComponent(parts[parts.length - 1] || "").trim();
-        const listSlug = parts[parts.length - 2] || "";
-        if (doc && doc !== listSlug) return doc;
-      }
+      desk.set_route("Form", doctype, formName);
+      return;
     } catch {
-      // ignore
+      // fallback to URL on top window
     }
   }
 
-  return "";
-}
+  const slug = doctype.toLowerCase().replace(/\s+/g, "-");
+  const path = `/app/${slug}/${encodeURIComponent(formName)}`;
+  try {
+    // Open inside Desk (same tab as Frappe), not a bare list
+    if (window.top && window.top !== window) {
+      window.top.location.href = path;
+      return;
+    }
+  } catch {
+    // ignore
+  }
 
-function documentHref(
-  row: CompareResult,
-  registerDoctype: string,
-  baseUrl?: string
-): string {
-  const docName = resolveRegisteredPeopleName(row);
-  if (!docName) return "";
-  const base = (baseUrl || "https://v2.the-nfp.org").replace(/\/$/, "");
-  const slug = registerDoctype.toLowerCase().replace(/\s+/g, "-");
-  return `${base}/app/${slug}/${encodeURIComponent(docName)}`;
+  const absolute = `${(baseUrl || "").replace(/\/$/, "")}${path}`;
+  window.open(absolute, "_blank", "noopener,noreferrer");
 }
 
 function ResultRow({
@@ -521,12 +553,9 @@ function ResultRow({
   familyDoctype: string;
   baseUrl?: string;
 }) {
-  void familyDoctype;
   const isDup =
     row.status === "exact_duplicate" || row.status === "possible_duplicate";
-  const href =
-    documentHref(row, registerDoctype, baseUrl) ||
-    (row.existing_url && row.existing_url !== "#" ? row.existing_url : "");
+  const canOpen = Boolean(row.existing_id || (row.existing_url && row.existing_url !== "#"));
 
   return (
     <tr className={isDup ? styles.dupRow : undefined}>
@@ -542,16 +571,17 @@ function ResultRow({
         <span className={`${styles.badge} ${styles[row.status]}`}>{STATUS_LABEL[row.status]}</span>
       </td>
       <td className={styles.viewCol}>
-        {href ? (
-          <a
+        {canOpen ? (
+          <button
+            type="button"
             className={styles.iconBtn}
-            href={href.startsWith("http") ? href : `https://v2.the-nfp.org${href.startsWith("/") ? "" : "/"}${href}`}
-            target="_top"
-            rel="noopener noreferrer"
-            title={href}
+            title="Open duplicate document"
+            onClick={() =>
+              openExistingRecord(row, registerDoctype, familyDoctype, baseUrl)
+            }
           >
             👁
-          </a>
+          </button>
         ) : (
           "—"
         )}
