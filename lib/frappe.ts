@@ -202,8 +202,8 @@ async function listDoctype(
   const dropped: string[] = [];
 
   while (true) {
-    // Prefer Resource API — reliably returns document `name`
-    const url = new URL(`${base()}/api/resource/${encodeURIComponent(doctype)}`);
+    const url = new URL(`${base()}/api/method/frappe.client.get_list`);
+    url.searchParams.set("doctype", doctype);
     url.searchParams.set("fields", JSON.stringify(select));
     url.searchParams.set("limit_page_length", String(pageSize));
     url.searchParams.set("limit_start", String(start));
@@ -226,41 +226,24 @@ async function listDoctype(
         out.length = 0;
         continue;
       }
-      // Fallback to whitelisted method
-      const methodUrl = new URL(`${base()}/api/method/frappe.client.get_list`);
-      methodUrl.searchParams.set("doctype", doctype);
-      methodUrl.searchParams.set("fields", JSON.stringify(select));
-      methodUrl.searchParams.set("limit_page_length", String(pageSize));
-      methodUrl.searchParams.set("limit_start", String(start));
-      methodUrl.searchParams.set("order_by", "modified desc");
-      if (filters?.length) {
-        methodUrl.searchParams.set("filters", JSON.stringify(filters));
+
+      // Fallback: REST resource API
+      const resourceRows = await listDoctypeViaResource(doctype, select, filters, start, pageSize);
+      if (resourceRows === null) {
+        throw new Error(formatFrappeError(res.status, text, `Frappe list failed for ${doctype}`));
       }
-      const methodRes = await fetch(methodUrl.toString(), {
-        headers: frappeAuthHeaders(),
-        cache: "no-store",
-      });
-      if (!methodRes.ok) {
-        throw new Error(
-          formatFrappeError(methodRes.status, await methodRes.text(), `Frappe list failed for ${doctype}`)
-        );
-      }
-      const methodJson = await methodRes.json();
-      const methodRows: Record<string, unknown>[] = Array.isArray(methodJson.message)
-        ? methodJson.message
-        : [];
-      if (!methodRows.length) break;
-      out.push(...methodRows);
-      if (methodRows.length < pageSize) break;
+      if (!resourceRows.length) break;
+      out.push(...resourceRows);
+      if (resourceRows.length < pageSize) break;
       start += pageSize;
       continue;
     }
 
     const json = await res.json();
-    const rows: Record<string, unknown>[] = Array.isArray(json.data)
-      ? json.data
-      : Array.isArray(json.message)
-        ? json.message
+    const rows: Record<string, unknown>[] = Array.isArray(json.message)
+      ? json.message
+      : Array.isArray(json.data)
+        ? json.data
         : [];
     if (!rows.length) break;
     out.push(...rows);
@@ -275,6 +258,34 @@ async function listDoctype(
   return out;
 }
 
+async function listDoctypeViaResource(
+  doctype: string,
+  fields: string[],
+  filters: unknown[] | undefined,
+  start: number,
+  pageSize: number
+): Promise<Record<string, unknown>[] | null> {
+  try {
+    const url = new URL(`${base()}/api/resource/${encodeURIComponent(doctype)}`);
+    url.searchParams.set("fields", JSON.stringify(fields));
+    url.searchParams.set("limit_page_length", String(pageSize));
+    url.searchParams.set("limit_start", String(start));
+    url.searchParams.set("order_by", "modified desc");
+    if (filters?.length) {
+      url.searchParams.set("filters", JSON.stringify(filters));
+    }
+    const res = await fetch(url.toString(), {
+      headers: frappeAuthHeaders(),
+      cache: "no-store",
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return Array.isArray(json.data) ? json.data : [];
+  } catch {
+    return null;
+  }
+}
+
 function parentUrl(parentId: string) {
   const slug = REGISTER_DOCTYPE.toLowerCase().replace(/\s+/g, "-");
   return `${base()}/app/${slug}/${encodeURIComponent(parentId)}`;
@@ -283,11 +294,6 @@ function parentUrl(parentId: string) {
 function familyUrl(familyId: string) {
   const slug = FAMILY_DOCTYPE.toLowerCase().replace(/\s+/g, "-");
   return `${base()}/app/${slug}/${encodeURIComponent(familyId)}`;
-}
-
-function recordDocName(row: Record<string, unknown>): string {
-  const raw = row.name ?? row.Name ?? row.ID ?? "";
-  return String(raw).trim();
 }
 
 async function fetchParentRecords(): Promise<SystemRecord[]> {
@@ -299,40 +305,38 @@ async function fetchParentRecords(): Promise<SystemRecord[]> {
     NAME_AR_FIELD,
   ]);
 
-  return rows
-    .map((row) => {
-      const id = recordDocName(row);
-      const en = String(row[NAME_FIELD] ?? "").trim();
-      const ar = String(row[NAME_AR_FIELD] ?? "").trim();
-      return {
-        name: id,
-        passport: String(row[PASSPORT_FIELD] ?? "").trim(),
-        phone: String(row[PHONE_FIELD] ?? "").trim(),
-        id_number: String(row[ID_FIELD] ?? "").trim(),
-        display_name: en || ar || id,
-        url: id ? parentUrl(id) : "#",
-        source: REGISTER_DOCTYPE,
-      };
-    })
-    .filter((r) => Boolean(r.name));
+  return rows.map((row) => {
+    const id = String(row.name ?? "");
+    const en = String(row[NAME_FIELD] ?? "").trim();
+    const ar = String(row[NAME_AR_FIELD] ?? "").trim();
+    return {
+      name: id,
+      passport: String(row[PASSPORT_FIELD] ?? "").trim(),
+      phone: String(row[PHONE_FIELD] ?? "").trim(),
+      id_number: String(row[ID_FIELD] ?? "").trim(),
+      display_name: en || ar || id,
+      url: parentUrl(id),
+      source: REGISTER_DOCTYPE,
+    };
+  });
 }
 
 function mapFamilyRow(row: Record<string, unknown>, parentHint?: string): SystemRecord {
-  const id = recordDocName(row);
+  const id = String(row.name ?? "");
   const parent = String(row.parent ?? parentHint ?? "").trim();
   const familyName = String(row[FAMILY_NAME_FIELD] ?? "").trim();
-  const openParent = parent || "";
   return {
-    name: id || (openParent ? `${openParent}-${familyName || "member"}` : ""),
+    name: id || `${parent}-${familyName || "member"}`,
     passport: String(row[FAMILY_PASSPORT_FIELD] ?? "").trim(),
     phone: String(row[FAMILY_PHONE_FIELD] ?? "").trim(),
     id_number: String(row[FAMILY_ID_FIELD] ?? "").trim(),
     display_name: familyName
-      ? `${familyName} (Family of ${openParent || "—"})`
-      : `Family Member ${id || openParent}`,
-    url: openParent ? parentUrl(openParent) : id ? familyUrl(id) : "#",
+      ? `${familyName} (Family of ${parent || "—"})`
+      : `Family Member ${id || parent}`,
+    // Open Family Member form directly (not parent Registered People)
+    url: id ? familyUrl(id) : parent ? parentUrl(parent) : "#",
     source: FAMILY_DOCTYPE,
-    parent: openParent || undefined,
+    parent: parent || undefined,
   };
 }
 
@@ -468,14 +472,30 @@ export async function fetchAllSystemRecords(): Promise<{
   records: SystemRecord[];
   warning?: string;
 }> {
-  if (!frappeConfigured()) return { records: [] };
+  if (!frappeConfigured()) {
+    return {
+      records: [],
+      warning: "Missing FRAPPE_BASE_URL / FRAPPE_API_KEY / FRAPPE_API_SECRET on Vercel",
+    };
+  }
+
+  if (!REGISTER_DOCTYPE) {
+    return { records: [], warning: "FRAPPE_REGISTER_DOCTYPE is empty" };
+  }
 
   const parents = await fetchParentRecords();
   const family = await fetchFamilyMembers(parents.map((p) => p.name));
+  const warnings = [family.warning].filter(Boolean);
+
+  if (!parents.length && !family.records.length) {
+    warnings.push(
+      `No records loaded from "${REGISTER_DOCTYPE}". Check API key Read permission and field names.`
+    );
+  }
 
   return {
     records: [...parents, ...family.records],
-    warning: family.warning,
+    warning: warnings.length ? warnings.join(" ") : undefined,
   };
 }
 

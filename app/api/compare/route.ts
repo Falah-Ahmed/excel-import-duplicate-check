@@ -68,6 +68,9 @@ export async function POST(req: NextRequest) {
       ok: true,
       demo: false,
       warning,
+      error: !records.length
+        ? warning || "No system records loaded — duplicate check cannot match anything"
+        : undefined,
       summary,
       results,
       system_records_loaded: records.length,
@@ -76,11 +79,13 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Compare failed";
-    const { results, summary } = demoCompare(rows);
+    // Do NOT use demo data — that hides the real failure (Matched By / Source empty)
+    const { results, summary } = compareRows(rows, []);
     return NextResponse.json({
       ok: false,
-      demo: true,
+      demo: false,
       error: message,
+      warning: message,
       summary,
       results,
       system_records_loaded: 0,

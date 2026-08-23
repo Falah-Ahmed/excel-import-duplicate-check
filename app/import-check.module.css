@@ -403,6 +403,31 @@
   cursor: pointer;
 }
 
+.alert {
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 13px;
+}
+
+.alert strong {
+  display: block;
+  margin-bottom: 6px;
+}
+
+.alertBody {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  max-height: 160px;
+  overflow: auto;
+}
+
 .btnPrimary {
   border: 0;
   background: #2563eb;
@@ -422,35 +447,19 @@
 }
 
 .iconBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid #93c5fd;
+  border: 1px solid #d1d5db;
   background: #fff;
   cursor: pointer;
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 600;
-  padding: 6px 10px;
-  line-height: 1;
+  padding: 4px 8px;
+  line-height: 1.2;
   border-radius: 6px;
   color: #1d4ed8;
-  text-decoration: none;
-  min-width: 40px;
-  min-height: 32px;
 }
 
 .iconBtn:hover {
-  background: #dbeafe;
-}
-
-.iconBtnDisabled {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.35;
-  min-width: 40px;
-  min-height: 32px;
-  font-size: 16px;
+  background: #eff6ff;
 }
 
 .btnGhost {
