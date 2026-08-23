@@ -156,70 +156,49 @@ export default function ImportCheck() {
   function downloadReport() {
     if (!compare?.results.length) return;
 
-    const header = [
-      "Excel Row",
-      "Name",
-      "Passport",
-      "Phone",
-      "ID Number",
-      "Status",
-      "Matched By",
-      "Existing Record",
-      "Source",
-    ];
-
-    const escapeXml = (value: unknown) =>
+    // Same style as uploaded Excel: passport / name / ID / phone — yellow = duplicates only
+    const escapeHtml = (value: unknown) =>
       String(value ?? "")
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
 
-    const rowsXml = compare.results
+    const headerCells = ["passport nu", "name", "ID", "phone nu"]
+      .map((h) => `<th style="font-weight:bold;border:1px solid #ccc;padding:4px 8px;">${escapeHtml(h)}</th>`)
+      .join("");
+
+    const bodyRows = compare.results
       .map((r) => {
         const isDup =
           r.status === "exact_duplicate" || r.status === "possible_duplicate";
-        const style = isDup ? ' ss:StyleID="Yellow"' : "";
-        const cells = [
-          r.row,
-          r.name,
-          r.passport,
-          r.phone,
-          r.id_number,
-          STATUS_LABEL[r.status],
-          r.matched_by,
-          r.existing_record,
-          r.existing_source || "",
-        ]
-          .map((v) => `<Cell><Data ss:Type="String">${escapeXml(v)}</Data></Cell>`)
+        const bg = isDup ? "background-color:#FFFF00;" : "";
+        const cells = [r.passport, r.name, r.id_number, r.phone]
+          .map(
+            (v) =>
+              `<td style="border:1px solid #ccc;padding:4px 8px;${bg}">${escapeHtml(
+                v === "—" ? "" : v
+              )}</td>`
+          )
           .join("");
-        return `<Row${style}>${cells}</Row>`;
+        return `<tr>${cells}</tr>`;
       })
       .join("");
 
-    const headerXml = header
-      .map((h) => `<Cell ss:StyleID="Header"><Data ss:Type="String">${escapeXml(h)}</Data></Cell>`)
-      .join("");
-
-    const xml = `<?xml version="1.0"?>
-<?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
- xmlns:o="urn:schemas-microsoft-com:office:office"
+    const html = `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office"
  xmlns:x="urn:schemas-microsoft-com:office:excel"
- xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">
- <Styles>
-  <Style ss:ID="Header"><Font ss:Bold="1"/></Style>
-  <Style ss:ID="Yellow"><Interior ss:Color="#FFFF66" ss:Pattern="Solid"/></Style>
- </Styles>
- <Worksheet ss:Name="Duplicate Report">
-  <Table>
-   <Row ss:StyleID="Header">${headerXml}</Row>
-   ${rowsXml}
-  </Table>
- </Worksheet>
-</Workbook>`;
+ xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="UTF-8" /></head>
+<body>
+<table>
+  <thead><tr>${headerCells}</tr></thead>
+  <tbody>${bodyRows}</tbody>
+</table>
+</body>
+</html>`;
 
-    const blob = new Blob([xml], { type: "application/vnd.ms-excel;charset=utf-8;" });
+    const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
@@ -414,6 +393,7 @@ export default function ImportCheck() {
                       key={row.row}
                       row={row}
                       registerDoctype={compare.config?.register_doctype || "Registered People"}
+                      familyDoctype={compare.config?.family_doctype || "Family Member"}
                       baseUrl={compare.config?.base_url}
                     />
                   ))}
@@ -466,41 +446,51 @@ export default function ImportCheck() {
 function openExistingRecord(
   row: CompareResult,
   registerDoctype: string,
+  familyDoctype: string,
   baseUrl?: string
 ) {
-  // Family Member → open parent Registered People form
-  const formName = row.existing_parent || row.existing_id;
+  const isFamily =
+    Boolean(row.existing_parent) ||
+    (row.existing_source || "") === familyDoctype;
+
+  // Family duplicate → open Family Member form (not Registered People)
+  const doctype = isFamily ? familyDoctype : registerDoctype;
+  const formName = row.existing_id;
   if (!formName) return;
 
   try {
     // @ts-expect-error parent Desk
     if (window.parent?.frappe?.set_route) {
       // @ts-expect-error parent Desk
-      window.parent.frappe.set_route("Form", registerDoctype, formName);
+      window.parent.frappe.set_route("Form", doctype, formName);
       return;
     }
   } catch {
     // cross-origin fallback below
   }
 
-  const slug = registerDoctype.toLowerCase().replace(/\s+/g, "-");
+  const slug = doctype.toLowerCase().replace(/\s+/g, "-");
   const url =
-    row.existing_url && row.existing_url !== "#"
-      ? row.existing_url
-      : `${(baseUrl || "").replace(/\/$/, "")}/app/${slug}/${encodeURIComponent(formName)}`;
+    isFamily && row.existing_id
+      ? `${(baseUrl || "").replace(/\/$/, "")}/app/${slug}/${encodeURIComponent(formName)}`
+      : row.existing_url && row.existing_url !== "#"
+        ? row.existing_url
+        : `${(baseUrl || "").replace(/\/$/, "")}/app/${slug}/${encodeURIComponent(formName)}`;
   if (url && url !== "#") window.open(url, "_blank", "noopener,noreferrer");
 }
 
 function ResultRow({
   row,
   registerDoctype,
+  familyDoctype,
   baseUrl,
 }: {
   row: CompareResult;
   registerDoctype: string;
+  familyDoctype: string;
   baseUrl?: string;
 }) {
-  const canOpen = Boolean(row.existing_parent || row.existing_id);
+  const canOpen = Boolean(row.existing_id);
 
   return (
     <tr>
@@ -521,11 +511,13 @@ function ResultRow({
             type="button"
             className={styles.iconBtn}
             title={
-              row.existing_parent
-                ? "Open family parent record"
+              row.existing_parent || row.existing_source
+                ? "Open Family Member"
                 : "Open existing record"
             }
-            onClick={() => openExistingRecord(row, registerDoctype, baseUrl)}
+            onClick={() =>
+              openExistingRecord(row, registerDoctype, familyDoctype, baseUrl)
+            }
           >
             👁
           </button>

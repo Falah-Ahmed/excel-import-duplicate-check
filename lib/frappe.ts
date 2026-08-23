@@ -254,6 +254,11 @@ function parentUrl(parentId: string) {
   return `${base()}/app/${slug}/${encodeURIComponent(parentId)}`;
 }
 
+function familyUrl(familyId: string) {
+  const slug = FAMILY_DOCTYPE.toLowerCase().replace(/\s+/g, "-");
+  return `${base()}/app/${slug}/${encodeURIComponent(familyId)}`;
+}
+
 async function fetchParentRecords(): Promise<SystemRecord[]> {
   const rows = await listDoctype(REGISTER_DOCTYPE, [
     PASSPORT_FIELD,
@@ -291,7 +296,8 @@ function mapFamilyRow(row: Record<string, unknown>, parentHint?: string): System
     display_name: familyName
       ? `${familyName} (Family of ${parent || "—"})`
       : `Family Member ${id || parent}`,
-    url: parent ? parentUrl(parent) : "#",
+    // Open Family Member form directly (not parent Registered People)
+    url: id ? familyUrl(id) : parent ? parentUrl(parent) : "#",
     source: FAMILY_DOCTYPE,
     parent: parent || undefined,
   };
