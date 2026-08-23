@@ -329,19 +329,6 @@ export default function ImportCheck() {
         )}
       </section>
 
-      {compare && (compare.error || compare.warning || compare.system_records_loaded === 0) && (
-        <div className={styles.alert}>
-          <strong>
-            {compare.system_records_loaded === 0
-              ? "System records not loaded — duplicates cannot be detected."
-              : "Notice"}
-          </strong>
-          <pre className={styles.alertBody}>
-            {compare.error || compare.warning || "Check Vercel FRAPPE_* env and API permissions."}
-          </pre>
-        </div>
-      )}
-
       {compare && (
         <section className={styles.card}>
           <div className={styles.resultsHead}>
