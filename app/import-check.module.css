@@ -272,6 +272,20 @@
   border-radius: 10px;
 }
 
+.viewCol {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background: #fff;
+  white-space: nowrap;
+  min-width: 72px;
+}
+
+.table thead .viewCol {
+  background: #f9fafb;
+  z-index: 3;
+}
+
 .table {
   width: 100%;
   border-collapse: collapse;
@@ -395,16 +409,19 @@
 }
 
 .iconBtn {
-  border: 0;
-  background: transparent;
+  border: 1px solid #d1d5db;
+  background: #fff;
   cursor: pointer;
-  font-size: 16px;
-  padding: 2px 6px;
-  line-height: 1;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 8px;
+  line-height: 1.2;
+  border-radius: 6px;
+  color: #1d4ed8;
 }
 
 .iconBtn:hover {
-  opacity: 0.75;
+  background: #eff6ff;
 }
 
 .btnGhost {

@@ -156,7 +156,6 @@ export default function ImportCheck() {
   function downloadReport() {
     if (!compare?.results.length) return;
 
-    // Same style as uploaded Excel: passport / name / ID / phone — yellow = duplicates only
     const escapeHtml = (value: unknown) =>
       String(value ?? "")
         .replace(/&/g, "&amp;")
@@ -164,8 +163,23 @@ export default function ImportCheck() {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
 
-    const headerCells = ["passport nu", "name", "ID", "phone nu"]
-      .map((h) => `<th style="font-weight:bold;border:1px solid #ccc;padding:4px 8px;">${escapeHtml(h)}</th>`)
+    const headers = [
+      "Excel Row",
+      "Name",
+      "Passport No.",
+      "Phone Number",
+      "ID Number",
+      "Matched By",
+      "Existing System Record",
+    ];
+
+    const headerCells = headers
+      .map(
+        (h) =>
+          `<th style="font-weight:bold;border:1px solid #ccc;padding:6px 10px;background:#f3f4f6;">${escapeHtml(
+            h
+          )}</th>`
+      )
       .join("");
 
     const bodyRows = compare.results
@@ -173,10 +187,18 @@ export default function ImportCheck() {
         const isDup =
           r.status === "exact_duplicate" || r.status === "possible_duplicate";
         const bg = isDup ? "background-color:#FFFF00;" : "";
-        const cells = [r.passport, r.name, r.id_number, r.phone]
+        const cells = [
+          r.row,
+          r.name,
+          r.passport,
+          r.phone,
+          r.id_number,
+          r.matched_by,
+          r.existing_record,
+        ]
           .map(
             (v) =>
-              `<td style="border:1px solid #ccc;padding:4px 8px;${bg}">${escapeHtml(
+              `<td style="border:1px solid #ccc;padding:6px 10px;${bg}">${escapeHtml(
                 v === "—" ? "" : v
               )}</td>`
           )
@@ -360,6 +382,7 @@ export default function ImportCheck() {
             <table className={styles.table}>
               <thead>
                 <tr>
+                  <th className={styles.viewCol}>View</th>
                   <th>Excel Row</th>
                   <th>Name</th>
                   <th>Passport No.</th>
@@ -369,7 +392,6 @@ export default function ImportCheck() {
                   <th>Existing System Record</th>
                   <th>Source</th>
                   <th>Status</th>
-                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -494,6 +516,26 @@ function ResultRow({
 
   return (
     <tr>
+      <td className={styles.viewCol}>
+        {canOpen ? (
+          <button
+            type="button"
+            className={styles.iconBtn}
+            title={
+              row.existing_parent || row.existing_source === familyDoctype
+                ? "Open Family Member"
+                : "Open existing record"
+            }
+            onClick={() =>
+              openExistingRecord(row, registerDoctype, familyDoctype, baseUrl)
+            }
+          >
+            👁 View
+          </button>
+        ) : (
+          "—"
+        )}
+      </td>
       <td>{row.row}</td>
       <td>{row.name}</td>
       <td>{row.passport}</td>
@@ -504,26 +546,6 @@ function ResultRow({
       <td>{row.existing_source || "—"}</td>
       <td>
         <span className={`${styles.badge} ${styles[row.status]}`}>{STATUS_LABEL[row.status]}</span>
-      </td>
-      <td>
-        {canOpen ? (
-          <button
-            type="button"
-            className={styles.iconBtn}
-            title={
-              row.existing_parent || row.existing_source
-                ? "Open Family Member"
-                : "Open existing record"
-            }
-            onClick={() =>
-              openExistingRecord(row, registerDoctype, familyDoctype, baseUrl)
-            }
-          >
-            👁
-          </button>
-        ) : (
-          "—"
-        )}
       </td>
     </tr>
   );
