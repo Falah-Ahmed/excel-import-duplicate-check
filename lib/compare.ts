@@ -1,6 +1,6 @@
 import type { CompareResult, CompareSummary, ExcelRow, RecordStatus } from "./types";
 import type { SystemRecord } from "./frappe";
-import { FAMILY_DOCTYPE, REGISTER_DOCTYPE } from "./frappe";
+import { FAMILY_DOCTYPE, REGISTER_DOCTYPE, frappeBaseUrl } from "./frappe";
 import {
   namesMatch,
   normalizeArabic,
@@ -52,7 +52,9 @@ function findMatches(row: ExcelRow, records: IndexedRecord[]): {
   const matchedBy: string[] = [];
 
   function add(record: IndexedRecord, reason: string) {
-    if (!matched.has(record.name)) matched.set(record.name, record);
+    const key = (record.parent || record.name || "").trim() || record.display_name;
+    if (!key) return;
+    if (!matched.has(key)) matched.set(key, record);
     if (!matchedBy.includes(reason)) matchedBy.push(reason);
   }
 
@@ -123,17 +125,19 @@ export function compareRows(rows: ExcelRow[], systemRecords: SystemRecord[]): {
     const { matches, matchedBy } = findMatches(row, indexed);
     const status = classify(row, matches, matchedBy);
     const primary =
-      matches.find((m) => m.source === FAMILY_DOCTYPE || Boolean(m.parent)) || matches[0];
+      matches.find((m) => Boolean((m.parent || m.name || "").trim()) && (m.source === FAMILY_DOCTYPE || Boolean(m.parent))) ||
+      matches.find((m) => Boolean((m.parent || m.name || "").trim())) ||
+      matches[0];
 
     // Document to open in Desk: parent Registered People name (e.g. DIH2)
     const openId = String(primary?.parent || primary?.name || "").trim();
     const slug = REGISTER_DOCTYPE.toLowerCase().replace(/\s+/g, "-");
-    const openUrl =
-      (primary?.url && primary.url !== "#"
+    const base = frappeBaseUrl().replace(/\/$/, "") || "https://v2.the-nfp.org";
+    const openUrl = openId
+      ? `${base}/app/${slug}/${encodeURIComponent(openId)}`
+      : primary?.url && primary.url !== "#"
         ? primary.url
-        : openId
-          ? `/app/${slug}/${encodeURIComponent(openId)}`
-          : "") || "";
+        : "";
 
     return {
       row: row.row,

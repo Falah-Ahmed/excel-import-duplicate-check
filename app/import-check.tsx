@@ -524,9 +524,9 @@ function ResultRow({
   void familyDoctype;
   const isDup =
     row.status === "exact_duplicate" || row.status === "possible_duplicate";
-  const href = documentHref(row, registerDoctype, baseUrl);
-  // Show eye for any matched row (has existing record), not only when href builds
-  const showOpen = Boolean(href) || (isDup && row.existing_record && row.existing_record !== "—");
+  const href =
+    documentHref(row, registerDoctype, baseUrl) ||
+    (row.existing_url && row.existing_url !== "#" ? row.existing_url : "");
 
   return (
     <tr className={isDup ? styles.dupRow : undefined}>
@@ -545,17 +545,13 @@ function ResultRow({
         {href ? (
           <a
             className={styles.iconBtn}
-            href={href}
+            href={href.startsWith("http") ? href : `https://v2.the-nfp.org${href.startsWith("/") ? "" : "/"}${href}`}
             target="_top"
             rel="noopener noreferrer"
             title={href}
           >
             👁
           </a>
-        ) : showOpen ? (
-          <span className={styles.iconBtnDisabled} title="Missing document id">
-            👁
-          </span>
         ) : (
           "—"
         )}
