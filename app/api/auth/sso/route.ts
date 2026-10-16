@@ -109,6 +109,10 @@ async function completeSso(opts: {
     return accessDeniedResponse();
   }
 
+  if (user === "Administrator" && !roles.includes("Administrator")) {
+    roles = ["Administrator", "System Manager", ...roles];
+  }
+
   const allowed = allowedRoles();
   if (!skipRoleCheck() && !hasAllowedRole(roles, allowed)) {
     return accessDeniedResponse();

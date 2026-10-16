@@ -15,9 +15,56 @@ function apiTokenHeader() {
   return `token ${key}:${secret}`;
 }
 
+function normalizeRoles(raw: unknown, user: string): string[] {
+  const fromPayload = Array.isArray(raw) ? raw.filter((r): r is string => Boolean(r)) : [];
+  if (user === "Administrator" && !fromPayload.includes("Administrator")) {
+    return ["Administrator", "System Manager", ...fromPayload];
+  }
+  return fromPayload;
+}
+
+async function redeemViaFrappe(method: string, token: string, auth: string) {
+  const headers = { Accept: "application/json", Authorization: auth };
+  const encoded = encodeURIComponent(token);
+  const attempts: Array<() => Promise<Response>> = [
+    () =>
+      fetch(`${base()}/api/method/${method}?token=${encoded}`, {
+        method: "GET",
+        headers,
+        cache: "no-store",
+      }),
+    () =>
+      fetch(`${base()}/api/method/${method}`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ token }).toString(),
+        cache: "no-store",
+      }),
+    () =>
+      fetch(`${base()}/api/method/${method}`, {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+        cache: "no-store",
+      }),
+  ];
+
+  for (const send of attempts) {
+    try {
+      const res = await send();
+      if (!res.ok) continue;
+      const json = await res.json();
+      const data = json.message || json;
+      if (data?.user && data.user !== "Guest") return data;
+    } catch {
+      // try next encoding
+    }
+  }
+  return null;
+}
+
 /**
  * Redeem a one-time Frappe SSO token (not a sid).
- * Tries HMAC bridge first, then Frappe cache redeem APIs.
  */
 export async function userFromOneTimeToken(token: string): Promise<{
   user: string;
@@ -26,7 +73,8 @@ export async function userFromOneTimeToken(token: string): Promise<{
 } | null> {
   const bridge = await verifyBridgeToken(token);
   if (bridge?.user) {
-    const roles = await fetchRolesForUser(bridge.user);
+    let roles = await fetchRolesForUser(bridge.user);
+    roles = normalizeRoles(roles, bridge.user);
     return {
       user: bridge.user,
       full_name: bridge.full_name || bridge.user,
@@ -39,31 +87,15 @@ export async function userFromOneTimeToken(token: string): Promise<{
 
   const methods = ["redeem_vercel_sso", "admin_dash.api.sso.redeem_vercel_sso"];
   for (const method of methods) {
-    try {
-      const res = await fetch(`${base()}/api/method/${method}`, {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          Authorization: auth,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ token }),
-        cache: "no-store",
-      });
-      if (!res.ok) continue;
-      const json = await res.json();
-      const data = json.message || json;
-      const user = data?.user;
-      if (!user || user === "Guest") continue;
-      const roles = await fetchRolesForUser(user);
-      return {
-        user,
-        full_name: data.full_name || user,
-        roles,
-      };
-    } catch {
-      // try next method
-    }
+    const data = await redeemViaFrappe(method, token, auth);
+    if (!data?.user || data.user === "Guest") continue;
+    let roles = normalizeRoles(data.roles, data.user);
+    if (!roles.length) roles = normalizeRoles(await fetchRolesForUser(data.user), data.user);
+    return {
+      user: data.user,
+      full_name: data.full_name || data.user,
+      roles,
+    };
   }
   return null;
 }

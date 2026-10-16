@@ -1,5 +1,4 @@
-# Frappe Server Script (API) — Frappe 15.43 RestrictedPython
-# API Method: get_vercel_dup_sso_url
+# Frappe Server Script — API Method: get_vercel_dup_sso_url
 # Allow Guest: unchecked
 
 DASHBOARD_URL = "https://excel-import-duplicate-check-lfae.vercel.app"
@@ -7,11 +6,22 @@ DASHBOARD_URL = "https://excel-import-duplicate-check-lfae.vercel.app"
 if frappe.session.user == "Guest":
 	frappe.throw("Login required")
 
-token = frappe.utils.generate_hash(length=40)
+roles = []
+if frappe.session.user == "Administrator":
+	roles = ["Administrator", "System Manager"]
+else:
+	user_doc = frappe.get_doc("User", frappe.session.user)
+	for row in user_doc.roles:
+		roles.append(row.role)
+
+stamp = frappe.utils.now().replace(" ", "T").replace(":", "")
+csrf = frappe.utils.cstr(frappe.session.csrf_token)
+token = (csrf + "-" + stamp).replace("/", "").replace("+", "").replace("=", "")
 payload = json.dumps(
 	{
 		"user": frappe.session.user,
 		"full_name": frappe.full_name or frappe.get_fullname(frappe.session.user),
+		"roles": roles,
 	}
 )
 frappe.log_error(title="vercel_sso:" + token, message=payload)
@@ -20,7 +30,7 @@ base = DASHBOARD_URL
 if base.endswith("/"):
 	base = base[0 : len(base) - 1]
 
-url = base + "/api/auth/sso?token=" + str(token) + "&next=/"
+url = base + "/api/auth/sso?token=" + token + "&next=/"
 
 redirect = frappe.form_dict.get("redirect")
 if redirect:
