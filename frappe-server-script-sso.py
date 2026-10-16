@@ -1,36 +1,21 @@
 # Frappe Server Script — API Method: get_vercel_dup_sso_url
 # Allow Guest: unchecked
+# Same as before: logged-in Frappe users only. Guest cannot get a sid.
 
 DASHBOARD_URL = "https://excel-import-duplicate-check-lfae.vercel.app"
 
 if frappe.session.user == "Guest":
 	frappe.throw("Login required")
 
-roles = []
-if frappe.session.user == "Administrator":
-	roles = ["Administrator", "System Manager"]
-else:
-	user_doc = frappe.get_doc("User", frappe.session.user)
-	for row in user_doc.roles:
-		roles.append(row.role)
-
-stamp = frappe.utils.now().replace(" ", "T").replace(":", "")
-csrf = frappe.utils.cstr(frappe.session.csrf_token)
-token = (csrf + "-" + stamp).replace("/", "").replace("+", "").replace("=", "")
-payload = json.dumps(
-	{
-		"user": frappe.session.user,
-		"full_name": frappe.full_name or frappe.get_fullname(frappe.session.user),
-		"roles": roles,
-	}
-)
-frappe.log_error(title="vercel_sso:" + token, message=payload)
+sid = frappe.request.cookies.get("sid")
+if not sid:
+	frappe.throw("Missing session cookie")
 
 base = DASHBOARD_URL
 if base.endswith("/"):
 	base = base[0 : len(base) - 1]
 
-url = base + "/api/auth/sso?token=" + token + "&next=/"
+url = base + "/api/auth/sso?sid=" + str(sid) + "&next=/"
 
 redirect = frappe.form_dict.get("redirect")
 if redirect:

@@ -57,15 +57,19 @@ async function userFromSid(sid: string) {
 
 function ssoBootstrapHtml(token: string, nextPath: string) {
   const key = sessionCookieName();
+  const dest =
+    nextPath +
+    (nextPath.includes("?") ? "&" : "?") +
+    "t=" +
+    encodeURIComponent(token);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="referrer" content="no-referrer" />
   <title>Signing in…</title>
   <script>
     try { sessionStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(token)}); } catch (e) {}
-    location.replace(${JSON.stringify(nextPath)});
+    location.replace(${JSON.stringify(dest)});
   </script>
 </head>
 <body></body>
