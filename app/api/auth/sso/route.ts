@@ -5,15 +5,16 @@ import {
   fetchRolesFromCookie,
   hasAllowedRole,
   sessionCookieHeader,
+  userFromOneTimeToken,
 } from "@/lib/frappe-login";
 import {
+  allowSidSso,
   allowedRoles,
   authConfigured,
   sessionCookieName,
   sessionCookieOptions,
   signSession,
   skipRoleCheck,
-  verifyBridgeToken,
 } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
@@ -56,74 +57,106 @@ async function userFromSid(sid: string) {
 
 function ssoBootstrapHtml(token: string, nextPath: string) {
   const key = sessionCookieName();
-  const dest =
-    nextPath +
-    (nextPath.includes("?") ? "&" : "?") +
-    "t=" +
-    encodeURIComponent(token);
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <meta name="referrer" content="no-referrer" />
   <title>Signing in…</title>
   <script>
     try { sessionStorage.setItem(${JSON.stringify(key)}, ${JSON.stringify(token)}); } catch (e) {}
-    location.replace(${JSON.stringify(dest)});
+    location.replace(${JSON.stringify(nextPath)});
   </script>
 </head>
 <body></body>
 </html>`;
 }
 
-/** SSO entry for Frappe iframe: /api/auth/sso?sid=FRAPPE_SID&next=/ */
-export async function GET(req: NextRequest) {
+async function completeSso(opts: {
+  sid: string;
+  token: string;
+  nextPath: string;
+}) {
   if (!authConfigured()) {
     return accessDeniedResponse();
   }
 
-  const next = req.nextUrl.searchParams.get("next") || "/";
-  const safeNext = next.startsWith("/") ? next : "/";
-  const sid = (req.nextUrl.searchParams.get("sid") || "").trim();
-  const token = (req.nextUrl.searchParams.get("token") || "").trim();
-
+  const safeNext = opts.nextPath.startsWith("/") ? opts.nextPath : "/";
   let user = "";
   let fullName = "";
   let roles: string[] = [];
 
-  if (sid) {
+  if (opts.token) {
+    const fromToken = await userFromOneTimeToken(opts.token);
+    if (!fromToken) {
+      return accessDeniedResponse();
+    }
+    user = fromToken.user;
+    fullName = fromToken.full_name;
+    roles = fromToken.roles;
+  } else if (opts.sid && allowSidSso()) {
     if (!baseUrl()) {
       return accessDeniedResponse();
     }
-    const fromSid = await userFromSid(sid);
+    const fromSid = await userFromSid(opts.sid);
     if (!fromSid) {
       return accessDeniedResponse();
     }
     user = fromSid.user;
     fullName = fromSid.full_name;
     roles = fromSid.roles;
-  } else if (token) {
-    const bridge = await verifyBridgeToken(token);
-    if (!bridge) {
-      return accessDeniedResponse();
-    }
-    user = bridge.user;
-    fullName = bridge.full_name || bridge.user;
-    roles = allowedRoles();
   } else {
     return accessDeniedResponse();
   }
 
   const allowed = allowedRoles();
-  if (sid && !skipRoleCheck() && !hasAllowedRole(roles, allowed)) {
+  if (!skipRoleCheck() && !hasAllowedRole(roles, allowed)) {
     return accessDeniedResponse();
   }
 
   const session = await signSession({ user, full_name: fullName, via: "sso" });
   const res = new NextResponse(ssoBootstrapHtml(session, safeNext), {
     status: 200,
-    headers: { "Content-Type": "text/html; charset=utf-8" },
+    headers: {
+      "Content-Type": "text/html; charset=utf-8",
+      "Cache-Control": "no-store",
+      "Referrer-Policy": "no-referrer",
+    },
   });
   const cookie = sessionCookieOptions(session);
   res.cookies.set(cookie.name, cookie.value, cookie);
   return res;
+}
+
+function readNext(req: NextRequest, formNext?: string) {
+  const next = formNext || req.nextUrl.searchParams.get("next") || "/";
+  return next.startsWith("/") ? next : "/";
+}
+
+export async function GET(req: NextRequest) {
+  return completeSso({
+    sid: (req.nextUrl.searchParams.get("sid") || "").trim(),
+    token: (req.nextUrl.searchParams.get("token") || "").trim(),
+    nextPath: readNext(req),
+  });
+}
+
+export async function POST(req: NextRequest) {
+  const contentType = req.headers.get("content-type") || "";
+  let token = "";
+  let next = "/";
+  if (contentType.includes("application/json")) {
+    const body = await req.json().catch(() => ({}));
+    token = String(body.token || "").trim();
+    next = String(body.next || "/");
+  } else {
+    const form = await req.formData().catch(() => null);
+    token = String(form?.get("token") || "").trim();
+    next = String(form?.get("next") || "/");
+  }
+  return completeSso({
+    sid: "",
+    token,
+    nextPath: readNext(req, next),
+  });
 }

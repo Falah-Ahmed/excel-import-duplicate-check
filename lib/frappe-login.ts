@@ -1,9 +1,71 @@
+import { verifyBridgeToken } from "@/lib/session";
+
 const base = () => (process.env.FRAPPE_BASE_URL || "").replace(/\/$/, "").trim();
 const apiKey = () => (process.env.FRAPPE_API_KEY || "").trim();
 const apiSecret = () => (process.env.FRAPPE_API_SECRET || "").trim();
 
 export function sessionCookieHeader(sid: string) {
   return `sid=${sid}; system_user=yes`;
+}
+
+function apiTokenHeader() {
+  const key = apiKey();
+  const secret = apiSecret();
+  if (!key || !secret) return "";
+  return `token ${key}:${secret}`;
+}
+
+/**
+ * Redeem a one-time Frappe SSO token (not a sid).
+ * Tries HMAC bridge first, then Frappe cache redeem APIs.
+ */
+export async function userFromOneTimeToken(token: string): Promise<{
+  user: string;
+  full_name: string;
+  roles: string[];
+} | null> {
+  const bridge = await verifyBridgeToken(token);
+  if (bridge?.user) {
+    const roles = await fetchRolesForUser(bridge.user);
+    return {
+      user: bridge.user,
+      full_name: bridge.full_name || bridge.user,
+      roles,
+    };
+  }
+
+  const auth = apiTokenHeader();
+  if (!base() || !auth) return null;
+
+  const methods = ["redeem_vercel_sso", "admin_dash.api.sso.redeem_vercel_sso"];
+  for (const method of methods) {
+    try {
+      const res = await fetch(`${base()}/api/method/${method}`, {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Authorization: auth,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ token }),
+        cache: "no-store",
+      });
+      if (!res.ok) continue;
+      const json = await res.json();
+      const data = json.message || json;
+      const user = data?.user;
+      if (!user || user === "Guest") continue;
+      const roles = await fetchRolesForUser(user);
+      return {
+        user,
+        full_name: data.full_name || user,
+        roles,
+      };
+    } catch {
+      // try next method
+    }
+  }
+  return null;
 }
 
 export async function fetchRolesForUser(user: string): Promise<string[]> {

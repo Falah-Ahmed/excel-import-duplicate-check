@@ -20,6 +20,11 @@ export function skipRoleCheck(): boolean {
   return (process.env.AUTH_SKIP_ROLE_CHECK || "").trim() === "1";
 }
 
+/** Sid-in-URL SSO is off by default. Set AUTH_ALLOW_SID=1 only for emergency rollback. */
+export function allowSidSso(): boolean {
+  return (process.env.AUTH_ALLOW_SID || "").trim() === "1";
+}
+
 export function allowedRoles(): string[] {
   return (process.env.AUTH_ALLOWED_ROLES || "System Manager,Administrator,Admin")
     .split(",")
